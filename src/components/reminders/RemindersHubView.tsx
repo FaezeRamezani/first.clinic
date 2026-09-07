@@ -15,12 +15,15 @@ export const RemindersHubView: React.FC = () => {
     appointments, 
     patients, 
     followUps, 
+    remindersTab,
+    setRemindersTab,
     openPaymentCollection, 
     openQuickCheckout,
     openFollowUpModal
   } = useClinic();
 
-  const [activeTab, setActiveTab] = useState<'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls'>('overdue_debts');
+  const activeTab = remindersTab;
+  const setActiveTab = setRemindersTab;
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // 1. Filtered Data per Scope

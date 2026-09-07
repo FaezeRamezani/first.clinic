@@ -2,11 +2,13 @@ export type ClinicScope = 'unified' | 'aesthetic' | 'dental';
 
 export type UserRole = 'receptionist' | 'admin_doctor';
 
-export type AppointmentStatus = 'pending' | 'checked_in' | 'completed' | 'canceled' | 'unsettled';
+export type AppointmentStatus = 'pending' | 'checked_in' | 'completed' | 'canceled' | 'rescheduled' | 'unsettled';
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected';
 
 export type FollowUpStatus = 'pending' | 'called_no_answer' | 'called_confirmed' | 'rescheduled' | 'completed';
+
+export type PresenceStatus = 'present' | 'absent' | 'pending';
 
 export interface Doctor {
   id: string;
@@ -59,15 +61,23 @@ export interface Appointment {
   doctorId: string;
   doctorName: string;
   practice: 'aesthetic' | 'dental';
-  date: string; // YYYY-MM-DD (Jalali format e.g. 1405-06-16)
-  timeSlot: string; // e.g. 10:30
+  date: string; // YYYY-MM-DD (Jalali format e.g. ۱۴۰۵-۰۶-۱۶)
+  timeSlot: string; // e.g. ۱۰:۳۰
   duration: number; // mins
   status: AppointmentStatus;
+  presenceStatus?: PresenceStatus;
   notes?: string;
   serviceId?: string;
   serviceName?: string;
   cabinetNumber?: string;
+  cancellationReason?: string;
+  cancellationType?: 'rescheduled' | 'no_replacement';
+  canceledAt?: string;
+  previousAppointmentId?: string;
+  replacementAppointmentId?: string;
 }
+
+export type OnlineRequestType = 'visit' | 'consultation';
 
 export interface OnlineRequest {
   id: string;
@@ -77,11 +87,14 @@ export interface OnlineRequest {
   targetPractice: 'aesthetic' | 'dental';
   doctorId: string;
   doctorName: string;
+  requestType?: OnlineRequestType;
+  proposedDates?: string[]; // Up to 3 suggested dates
   requestedDate: string;
   requestedTimeSlot: string;
   notes?: string;
   status: RequestStatus;
   rejectionReason?: string;
+  rejectedAt?: string;
   createdAt: string;
 }
 
@@ -93,6 +106,7 @@ export interface FinancialTransaction {
   appointmentId?: string;
   practice: 'aesthetic' | 'dental';
   date: string; // Jalali YYYY-MM-DD
+  timestamp?: string; // Time e.g. ۱۴:۳۰
   serviceName: string;
   totalCost: number; // Tomans
   discount: number; // Tomans

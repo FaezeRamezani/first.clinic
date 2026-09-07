@@ -7,6 +7,7 @@ import type {
   Patient, 
   Appointment, 
   AppointmentStatus, 
+  PresenceStatus,
   OnlineRequest, 
   FinancialTransaction, 
   FollowUpTask, 
@@ -23,12 +24,24 @@ import {
   initialFollowUps, 
   initialExpenses 
 } from '../data/mockData';
+import { getTodayJalaliDate, toEnglishDigits } from '../utils/persianUtils';
+
+export interface NewAppointmentPrefillData {
+  doctorId?: string;
+  date?: string;
+  timeSlot?: string;
+  patient?: Patient | null;
+  isSlotBooking?: boolean;
+  previousAppointmentId?: string;
+}
 
 interface ClinicContextType {
   scope: ClinicScope;
   setScope: (scope: ClinicScope) => void;
   activeView: string;
   setActiveView: (view: string) => void;
+  remindersTab: 'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls';
+  setRemindersTab: (tab: 'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls') => void;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
 
@@ -50,6 +63,8 @@ interface ClinicContextType {
   
   isNewAppointmentOpen: boolean;
   setIsNewAppointmentOpen: (open: boolean) => void;
+  newAppointmentPrefill: NewAppointmentPrefillData | null;
+  openNewAppointment: (prefill?: NewAppointmentPrefillData) => void;
 
   isQuickCheckoutOpen: boolean;
   setIsQuickCheckoutOpen: (open: boolean) => void;
@@ -72,10 +87,18 @@ interface ClinicContextType {
   isNewExpenseOpen: boolean;
   setIsNewExpenseOpen: (open: boolean) => void;
 
+  isCancelAppointmentOpen: boolean;
+  setIsCancelAppointmentOpen: (open: boolean) => void;
+  selectedAppointmentForCancel: Appointment | null;
+  openCancelAppointment: (apt: Appointment) => void;
+
   // Action methods
   addAppointment: (apt: Omit<Appointment, 'id'>) => void;
+  cancelAppointment: (id: string, type: 'rescheduled' | 'no_replacement', reason?: string) => void;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => void;
-  approveOnlineRequest: (id: string, timeSlot: string) => void;
+  updateAppointmentPresenceStatus: (id: string, presenceStatus: PresenceStatus) => void;
+  checkAppointmentConflict: (date: string, timeSlot: string, doctorId: string, excludeApptId?: string) => boolean;
+  approveOnlineRequest: (id: string, confirmedDate?: string, timeSlot?: string, doctorId?: string, customMessage?: string) => boolean;
   rejectOnlineRequest: (id: string, reason: string) => void;
   recordCheckout: (trxData: Omit<FinancialTransaction, 'id'>) => void;
   collectPayment: (patientId: string, amount: number, method: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer', posAccount: string, notes?: string) => void;
@@ -90,7 +113,16 @@ const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [scope, setScope] = useState<ClinicScope>('unified');
-  const [activeView, setActiveView] = useState<string>('dashboard');
+  const [activeViewState, setActiveViewState] = useState<string>('dashboard');
+
+  const setActiveView = (view: string) => {
+    setActiveViewState(view);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  };
+
+  const [remindersTab, setRemindersTab] = useState<'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls'>('overdue_debts');
   const [userRole, setUserRole] = useState<UserRole>('receptionist');
 
   const [doctors] = useState<Doctor[]>(initialDoctors);
@@ -107,6 +139,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Modals state
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState<boolean>(false);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState<boolean>(false);
+  const [newAppointmentPrefill, setNewAppointmentPrefill] = useState<NewAppointmentPrefillData | null>(null);
   
   const [isQuickCheckoutOpen, setIsQuickCheckoutOpen] = useState<boolean>(false);
   const [selectedAppointmentForCheckout, setSelectedAppointmentForCheckout] = useState<Appointment | null>(null);
@@ -119,6 +152,14 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [isNewPatientOpen, setIsNewPatientOpen] = useState<boolean>(false);
   const [isNewExpenseOpen, setIsNewExpenseOpen] = useState<boolean>(false);
+
+  const [isCancelAppointmentOpen, setIsCancelAppointmentOpen] = useState<boolean>(false);
+  const [selectedAppointmentForCancel, setSelectedAppointmentForCancel] = useState<Appointment | null>(null);
+
+  const openNewAppointment = (prefill?: NewAppointmentPrefillData) => {
+    setNewAppointmentPrefill(prefill || null);
+    setIsNewAppointmentOpen(true);
+  };
 
   const openQuickCheckout = (appointment: Appointment) => {
     setSelectedAppointmentForCheckout(appointment);
@@ -135,21 +176,109 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsFollowUpResultOpen(true);
   };
 
+  const openCancelAppointment = (apt: Appointment) => {
+    setSelectedAppointmentForCancel(apt);
+    setIsCancelAppointmentOpen(true);
+  };
+
+  const checkAppointmentConflict = (date: string, timeSlot: string, doctorId: string, excludeApptId?: string): boolean => {
+    const normDate = toEnglishDigits(date).trim().replace(/\//g, '-');
+    const normSlot = toEnglishDigits(timeSlot).trim();
+
+    return appointments.some(apt => {
+      if (apt.id === excludeApptId || apt.status === 'canceled' || apt.status === 'rescheduled') return false;
+      const aptDate = toEnglishDigits(apt.date).trim().replace(/\//g, '-');
+      const aptSlot = toEnglishDigits(apt.timeSlot).trim();
+      return apt.doctorId === doctorId && aptDate === normDate && aptSlot === normSlot;
+    });
+  };
+
   const addAppointment = (aptData: Omit<Appointment, 'id'>) => {
+    const newAptId = `apt-${Date.now()}`;
     const newApt: Appointment = {
       ...aptData,
-      id: `apt-${Date.now()}`
+      id: newAptId
     };
-    setAppointments(prev => [newApt, ...prev]);
+    setAppointments(prev => {
+      const updated = prev.map(a => {
+        // Link replacement ID on previous appointment and set status to rescheduled atomically
+        if (aptData.previousAppointmentId && a.id === aptData.previousAppointmentId) {
+          return {
+            ...a,
+            status: 'rescheduled' as const,
+            cancellationType: 'rescheduled' as const,
+            cancellationReason: a.cancellationReason || 'تغییر نوبت و تعیین زمان جدید',
+            canceledAt: getTodayJalaliDate(),
+            replacementAppointmentId: newAptId
+          };
+        }
+        // Also update any pending canceled appointment for same patient if applicable
+        if (a.patientId === aptData.patientId && a.status === 'canceled' && a.cancellationType === 'no_replacement') {
+          return {
+            ...a,
+            cancellationType: 'rescheduled' as const,
+            replacementAppointmentId: newAptId
+          };
+        }
+        return a;
+      });
+      return [newApt, ...updated];
+    });
+  };
+
+  const cancelAppointment = (id: string, type: 'rescheduled' | 'no_replacement', reason?: string) => {
+    setAppointments(prev => prev.map(apt => {
+      if (apt.id === id) {
+        // Prevent modifying completed/settled appointments
+        if (apt.status === 'completed') return apt;
+
+        const newStatus: AppointmentStatus = type === 'rescheduled' ? 'rescheduled' : 'canceled';
+        return {
+          ...apt,
+          status: newStatus,
+          cancellationType: type,
+          cancellationReason: reason || (type === 'no_replacement' ? 'لغو شده - بدون نوبت جایگزین' : 'تغییر نوبت و تعیین زمان جدید'),
+          canceledAt: getTodayJalaliDate()
+        };
+      }
+      return apt;
+    }));
   };
 
   const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
-    setAppointments(prev => prev.map(apt => apt.id === id ? { ...apt, status } : apt));
+    setAppointments(prev => prev.map(apt => {
+      // Completed, canceled, or rescheduled appointments cannot have status changed
+      if (apt.id === id && apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled') {
+        return { ...apt, status };
+      }
+      return apt;
+    }));
   };
 
-  const approveOnlineRequest = (id: string, timeSlot: string) => {
+  const updateAppointmentPresenceStatus = (id: string, presenceStatus: PresenceStatus) => {
+    setAppointments(prev => prev.map(apt => {
+      // Completed, canceled, or rescheduled appointments cannot have presence changed
+      if (apt.id === id && apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled') {
+        return { ...apt, presenceStatus };
+      }
+      return apt;
+    }));
+  };
+
+  const approveOnlineRequest = (id: string, confirmedDate?: string, timeSlot?: string, doctorId?: string, customMessage?: string): boolean => {
     const req = onlineRequests.find(r => r.id === id);
-    if (!req) return;
+    if (!req) return false;
+
+    const targetDocId = doctorId || req.doctorId;
+    const targetDate = confirmedDate || req.requestedDate;
+    const targetSlot = timeSlot || req.requestedTimeSlot;
+    const docObj = doctors.find(d => d.id === targetDocId) || doctors[0];
+
+    // Conflict check
+    const hasConflict = checkAppointmentConflict(targetDate, targetSlot, targetDocId);
+    if (hasConflict) {
+      return false;
+    }
 
     // Update request status
     setOnlineRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'approved' } : r));
@@ -172,7 +301,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         medicalNotes: req.notes || '',
         emergencyContact: { name: '-', phone: '-', relation: '-' },
         balance: 0,
-        createdAt: '۱۴۰۵/۰۶/۱۶'
+        createdAt: getTodayJalaliDate()
       };
       setPatients(prev => [newPat, ...prev]);
       patientId = newPat.id;
@@ -185,20 +314,21 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       patientName: req.patientName,
       patientMobile: req.mobile,
       fileNumber: fileNum,
-      doctorId: req.doctorId,
-      doctorName: req.doctorName,
+      doctorId: targetDocId,
+      doctorName: docObj.name,
       practice: req.targetPractice,
-      date: req.requestedDate,
-      timeSlot: timeSlot || req.requestedTimeSlot,
+      date: targetDate,
+      timeSlot: targetSlot,
       duration: 30,
       status: 'pending',
-      notes: `نوبت تأییدشده از پورتال آنلاین: ${req.notes || ''}`
+      notes: customMessage || `نوبت تأییدشده از پورتال آنلاین: ${req.notes || ''}`
     };
     setAppointments(prev => [newApt, ...prev]);
+    return true;
   };
 
   const rejectOnlineRequest = (id: string, reason: string) => {
-    setOnlineRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected', rejectionReason: reason } : r));
+    setOnlineRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected', rejectionReason: reason, rejectedAt: getTodayJalaliDate() } : r));
   };
 
   const recordCheckout = (trxData: Omit<FinancialTransaction, 'id'>) => {
@@ -322,8 +452,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       value={{
         scope,
         setScope,
-        activeView,
+        activeView: activeViewState,
         setActiveView,
+        remindersTab,
+        setRemindersTab,
         userRole,
         setUserRole,
 
@@ -344,6 +476,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         isNewAppointmentOpen,
         setIsNewAppointmentOpen,
+        newAppointmentPrefill,
+        openNewAppointment,
 
         isQuickCheckoutOpen,
         setIsQuickCheckoutOpen,
@@ -366,8 +500,16 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isNewExpenseOpen,
         setIsNewExpenseOpen,
 
+        isCancelAppointmentOpen,
+        setIsCancelAppointmentOpen,
+        selectedAppointmentForCancel,
+        openCancelAppointment,
+
         addAppointment,
+        cancelAppointment,
         updateAppointmentStatus,
+        updateAppointmentPresenceStatus,
+        checkAppointmentConflict,
         approveOnlineRequest,
         rejectOnlineRequest,
         recordCheckout,

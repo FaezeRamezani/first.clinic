@@ -17,6 +17,7 @@ import { PaymentCollectionModal } from './components/modals/PaymentCollectionMod
 import { FollowUpResultModal } from './components/modals/FollowUpResultModal';
 import { NewPatientModal } from './components/modals/NewPatientModal';
 import { NewExpenseModal } from './components/modals/NewExpenseModal';
+import { CancelAppointmentModal } from './components/modals/CancelAppointmentModal';
 
 const MainContent: React.FC = () => {
   const { activeView } = useClinic();
@@ -65,6 +66,7 @@ const MainContent: React.FC = () => {
       <FollowUpResultModal />
       <NewPatientModal />
       <NewExpenseModal />
+      <CancelAppointmentModal />
     </div>
   );
 };

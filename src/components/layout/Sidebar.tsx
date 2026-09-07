@@ -10,12 +10,24 @@ import {
   Sparkles, 
   Stethoscope, 
   Building2,
-  ChevronLeft
+  ChevronLeft,
+  Calendar,
+  UserPlus,
+  Plus
 } from 'lucide-react';
 import { useClinic } from '../../context/ClinicContext';
 
 export const Sidebar: React.FC = () => {
-  const { activeView, setActiveView, scope, onlineRequests, followUps, appointments } = useClinic();
+  const { 
+    activeView, 
+    setActiveView, 
+    scope, 
+    onlineRequests, 
+    followUps, 
+    appointments,
+    setIsNewAppointmentOpen,
+    setIsNewPatientOpen
+  } = useClinic();
 
   // Calculate badge counts
   const pendingRequestsCount = onlineRequests.filter(r => r.status === 'pending').length;
@@ -69,35 +81,98 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  const scopeColorClasses = {
-    unified: 'from-blue-600 to-indigo-600',
-    aesthetic: 'from-indigo-600 to-violet-600',
-    dental: 'from-teal-600 to-cyan-600'
+  // Visual tokens for practice scope
+  const scopeConfig = {
+    unified: {
+      bg: 'bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100/50',
+      border: 'border-indigo-200',
+      text: 'text-indigo-950',
+      subText: 'text-indigo-600',
+      badgeBg: 'bg-indigo-100 text-indigo-700',
+      Icon: Building2,
+      label: 'کل کلینیک',
+      subLabel: 'زیبایی & دندانپزشکی'
+    },
+    aesthetic: {
+      bg: 'bg-gradient-to-br from-purple-50 via-slate-50 to-purple-100/50',
+      border: 'border-purple-200',
+      text: 'text-purple-950',
+      subText: 'text-purple-600',
+      badgeBg: 'bg-purple-100 text-purple-700',
+      Icon: Sparkles,
+      label: 'داخلی و زیبایی',
+      subLabel: 'مطب ۱ (پوست و زیبایی)'
+    },
+    dental: {
+      bg: 'bg-gradient-to-br from-teal-50 via-slate-50 to-teal-100/50',
+      border: 'border-teal-200',
+      text: 'text-teal-950',
+      subText: 'text-teal-600',
+      badgeBg: 'bg-teal-100 text-teal-700',
+      Icon: Stethoscope,
+      label: 'دندانپزشکی',
+      subLabel: 'مطب ۲ (دندانپزشکی)'
+    }
   };
 
+  const currentScope = scopeConfig[scope];
+  const ScopeIcon = currentScope.Icon;
+
   return (
-    <aside className="w-64 bg-white border-l border-slate-200 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 shrink-0 z-20">
-      <div className="p-4 space-y-6">
+    <aside className="w-64 bg-white border-l border-slate-200 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 shrink-0 z-20 overflow-y-auto">
+      <div className="p-3.5 space-y-4">
         
-        {/* Practice Info Badge */}
-        <div className={`p-3.5 rounded-2xl bg-gradient-to-r ${scopeColorClasses[scope]} text-white shadow-sm flex items-center justify-between`}>
+        {/* Practice Scope Indicator */}
+        <div className={`p-3 rounded-xl ${currentScope.bg} border ${currentScope.border} shadow-2xs space-y-1.5 transition-all duration-200`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">حوزه فعال سیستم</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${currentScope.badgeBg}`}>
+              {scope === 'unified' ? 'مشترک' : scope === 'aesthetic' ? 'مطب ۱' : 'مطب ۲'}
+            </span>
+          </div>
           <div className="flex items-center gap-2.5">
-            {scope === 'aesthetic' && <Sparkles className="w-5 h-5" />}
-            {scope === 'dental' && <Stethoscope className="w-5 h-5" />}
-            {scope === 'unified' && <Building2 className="w-5 h-5" />}
+            <div className={`p-1.5 rounded-lg bg-white shadow-2xs border ${currentScope.border}`}>
+              <ScopeIcon className={`w-4 h-4 ${currentScope.subText}`} />
+            </div>
             <div>
-              <p className="text-xs font-semibold opacity-90">حالت فعال فیلتر:</p>
-              <p className="text-xs font-bold leading-snug">
-                {scope === 'unified' && 'کلینیک مشترک (همه)'}
-                {scope === 'aesthetic' && 'مطب زیبایی (دکتر رمضانی)'}
-                {scope === 'dental' && 'مطب دندانپزشکی (دکتر آخرتی)'}
-              </p>
+              <p className={`text-xs font-black ${currentScope.text} leading-tight`}>{currentScope.label}</p>
+              <p className="text-[10px] text-slate-500 font-medium">{currentScope.subLabel}</p>
             </div>
           </div>
         </div>
 
+        {/* Quick Actions (Moved into Sidebar) */}
+        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+              <Plus className="w-3.5 h-3.5 text-indigo-600" />
+              <span>ثبت سریع</span>
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => setIsNewAppointmentOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>نوبت جدید</span>
+            </button>
+
+            <button
+              onClick={() => setIsNewPatientOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-2 py-2 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-teal-600" />
+              <span>بیمار جدید</span>
+            </button>
+          </div>
+        </div>
+
         {/* Navigation List */}
-        <nav className="space-y-1">
+        <nav className="space-y-1 pt-1">
+          <div className="px-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            منوی اصلی
+          </div>
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
@@ -105,13 +180,13 @@ export const Sidebar: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => setActiveView(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
                   isActive
                     ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                   <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                   <span>{item.label}</span>
                 </div>
@@ -129,9 +204,9 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Footer Info */}
-      <div className="p-4 border-t border-slate-100 text-[11px] text-slate-400 font-medium text-center">
-        سامانه هوشمند کلینیک متمرکز v2.5
-        <p className="text-[10px] text-slate-400/80 mt-0.5">طراحی ویژه مطب زیبایی و دندانپزشکی</p>
+      <div className="p-3 border-t border-slate-100 text-[11px] text-slate-400 font-medium text-center">
+        سامانه هوشمند کلینیک متمرکز
+        <p className="text-[10px] text-slate-400/80 mt-0.5">زیبایی & دندانپزشکی</p>
       </div>
     </aside>
   );
