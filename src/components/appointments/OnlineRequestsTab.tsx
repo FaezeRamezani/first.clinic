@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { toFarsiDigits } from '../../utils/persianUtils';
+import { toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
 import { 
   Globe, 
   CheckCircle2, 
@@ -12,9 +12,14 @@ import {
   CalendarCheck,
   MessageSquare,
   Check,
-  X
+  X,
+  Filter,
+  ArrowUpDown,
+  Search,
+  User
 } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
+import { TimeSlotPicker } from '../common/TimeSlotPicker';
 import type { OnlineRequest } from '../../types';
 
 export const OnlineRequestsTab: React.FC = () => {
@@ -22,12 +27,16 @@ export const OnlineRequestsTab: React.FC = () => {
     scope, 
     onlineRequests, 
     doctors, 
+    appointments,
     approveOnlineRequest, 
     rejectOnlineRequest, 
     checkAppointmentConflict 
   } = useClinic();
 
   const [activeFilter, setActiveFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [internalPracticeFilter, setInternalPracticeFilter] = useState<'all' | 'aesthetic' | 'dental'>('all');
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Approval Modal States
   const [selectedReqForApproval, setSelectedReqForApproval] = useState<OnlineRequest | null>(null);
@@ -41,11 +50,28 @@ export const OnlineRequestsTab: React.FC = () => {
   const [selectedReqForRejection, setSelectedReqForRejection] = useState<OnlineRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('تکمیل ظرفیت نوبت‌های پزشک در تاریخ درخواستی');
 
+  // Top-level Global Practice Scope filter
   const scopeFilteredRequests = onlineRequests.filter(r => scope === 'unified' || r.targetPractice === scope);
   
-  const displayRequests = scopeFilteredRequests.filter(r => {
-    if (activeFilter === 'all') return true;
-    return r.status === activeFilter;
+  // Combinable filters (Status + Practice + Search)
+  const filteredRequests = scopeFilteredRequests.filter(r => {
+    if (activeFilter !== 'all' && r.status !== activeFilter) return false;
+    if (internalPracticeFilter !== 'all' && r.targetPractice !== internalPracticeFilter) return false;
+    if (searchTerm.trim()) {
+      const term = toEnglishDigits(searchTerm).toLowerCase().trim();
+      const nameMatch = r.patientName.toLowerCase().includes(term);
+      const mobileMatch = toEnglishDigits(r.mobile).includes(term);
+      const natIdMatch = r.nationalId ? toEnglishDigits(r.nationalId).includes(term) : false;
+      if (!nameMatch && !mobileMatch && !natIdMatch) return false;
+    }
+    return true;
+  });
+
+  // Sort by registration date (Newest / Oldest)
+  const displayRequests = [...filteredRequests].sort((a, b) => {
+    const dateA = toEnglishDigits(a.createdAt || a.requestedDate);
+    const dateB = toEnglishDigits(b.createdAt || b.requestedDate);
+    return sortOrder === 'newest' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
   });
 
   const pendingCount = scopeFilteredRequests.filter(r => r.status === 'pending').length;
@@ -56,7 +82,7 @@ export const OnlineRequestsTab: React.FC = () => {
     setSelectedReqForApproval(req);
     setConfirmedDate(req.requestedDate);
     setConfirmedTimeSlot(req.requestedTimeSlot || '۱۰:۳۰');
-    setConfirmedDoctorId(req.doctorId);
+    setConfirmedDoctorId(req.doctorId); // Doctor selected by patient is FIXED (Section 5)
     setApprovalError('');
 
     const docName = req.doctorName;
@@ -119,7 +145,7 @@ export const OnlineRequestsTab: React.FC = () => {
   return (
     <div className="space-y-4">
       
-      {/* Header Info Banner */}
+      {/* Section 7: Preserved Visual Card Banner */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
@@ -180,11 +206,59 @@ export const OnlineRequestsTab: React.FC = () => {
         </div>
       </div>
 
+      {/* Section 6: Filter and Sort Bar (Compact, Desktop single row, Mobile wrap) */}
+      <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          
+          {/* Sort Control */}
+          <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 font-bold">
+            <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-slate-600">مرتب‌سازی:</span>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
+              className="bg-white border border-slate-300 text-slate-800 text-xs font-bold rounded-lg px-2 py-0.5 outline-none cursor-pointer"
+            >
+              <option value="newest">جدیدترین درخواست</option>
+              <option value="oldest">قدیمی‌ترین درخواست</option>
+            </select>
+          </div>
+
+          {/* Internal Practice Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 font-bold">
+            <Filter className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-slate-600">مطب:</span>
+            <select
+              value={internalPracticeFilter}
+              onChange={(e) => setInternalPracticeFilter(e.target.value as any)}
+              className="bg-white border border-slate-300 text-slate-800 text-xs font-bold rounded-lg px-2 py-0.5 outline-none cursor-pointer"
+            >
+              <option value="all">همه مطب‌ها</option>
+              <option value="aesthetic">زیبایی</option>
+              <option value="dental">دندانپزشکی</option>
+            </select>
+          </div>
+
+        </div>
+
+        {/* Search Input Box */}
+        <div className="relative flex items-center w-full sm:w-64">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 pointer-events-none" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="جستجوی بیمار / همراه / کد ملی..."
+            className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-medium rounded-xl pr-8 pl-3 py-1.5 outline-none focus:border-indigo-500 focus:bg-white"
+          />
+        </div>
+      </div>
+
       {/* Unified Compact & Responsive Table Structure */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         {displayRequests.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
-            هیچ درخواستی در این وضعیت ثبت نشده است.
+            هیچ درخواستی با این فیلتر یا جستجو یافت نشد.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -224,7 +298,7 @@ export const OnlineRequestsTab: React.FC = () => {
                         <p className="text-[10px] text-slate-400">{req.nationalId ? toFarsiDigits(req.nationalId) : '-'}</p>
                       </td>
                       
-                      {/* Practice Column ONLY (No Doctor Name) */}
+                      {/* Practice Column ONLY */}
                       <td className="py-3 px-3.5 whitespace-nowrap">
                         {isAesthetic ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-purple-100 text-purple-800 text-[11px] font-bold">
@@ -244,7 +318,7 @@ export const OnlineRequestsTab: React.FC = () => {
                         {toFarsiDigits(req.requestedDate)} - {toFarsiDigits(req.requestedTimeSlot)}
                       </td>
                       
-                      {/* Notes (Controlled Width & Truncated) */}
+                      {/* Notes */}
                       <td className="py-3 px-3.5 text-slate-600 max-w-[200px] truncate" title={req.notes}>
                         {req.notes || '-'}
                       </td>
@@ -272,8 +346,6 @@ export const OnlineRequestsTab: React.FC = () => {
                       <td className="py-3 px-3.5 text-center whitespace-nowrap">
                         {req.status === 'pending' ? (
                           <div className="flex items-center justify-center gap-1.5">
-                            
-                            {/* Checkmark Button for Approval */}
                             <button
                               onClick={() => handleOpenApprovalModal(req)}
                               title="تأیید و تخصیص ساعت"
@@ -282,7 +354,6 @@ export const OnlineRequestsTab: React.FC = () => {
                               <Check className="w-4 h-4" />
                             </button>
 
-                            {/* Cross Button for Rejection */}
                             <button
                               onClick={() => setSelectedReqForRejection(req)}
                               title="رد درخواست"
@@ -290,7 +361,6 @@ export const OnlineRequestsTab: React.FC = () => {
                             >
                               <X className="w-4 h-4" />
                             </button>
-
                           </div>
                         ) : req.status === 'approved' ? (
                           <span className="text-[11px] text-emerald-700 font-bold">
@@ -311,10 +381,10 @@ export const OnlineRequestsTab: React.FC = () => {
         )}
       </div>
 
-      {/* Enhanced Approval Modal with Shared JalaliDatePicker */}
+      {/* Section 5: Approval Modal with Read-Only Doctor & TimeSlotPicker */}
       {selectedReqForApproval && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-xl bg-emerald-600 text-white shadow-2xs">
@@ -335,8 +405,8 @@ export const OnlineRequestsTab: React.FC = () => {
 
             <div className="space-y-4 text-xs">
               
-              {/* Date & Time Slot Allocation Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* ROW 1 (Section 5): Confirmed Date & Read-Only Doctor Display in one Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 {/* Reusable JalaliDatePicker */}
                 <div>
                   <JalaliDatePicker
@@ -346,30 +416,27 @@ export const OnlineRequestsTab: React.FC = () => {
                   />
                 </div>
 
+                {/* Read-Only Doctor Display (NOT a select) */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">ساعت قطعی حضور (Time Slot):</label>
-                  <input
-                    type="text"
-                    value={confirmedTimeSlot}
-                    onChange={(e) => handleDateOrTimeOrDoctorChange(confirmedDate, toFarsiDigits(e.target.value), confirmedDoctorId)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 dir-ltr text-right"
-                    placeholder="۱۰:۳۰"
-                  />
+                  <label className="block text-xs font-bold text-slate-700 mb-1">پزشک مرتبط (درخواست بیمار):</label>
+                  <div className="bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>{selectedReqForApproval.doctorName}</span>
+                    <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.2 rounded font-bold mr-auto">غیرقابل تغییر</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Doctor Selector */}
+              {/* ROW 2 (Section 5): Time Slot Selection via TimeSlotPicker chip grid */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">پزشک معالج مربوطه:</label>
-                <select
-                  value={confirmedDoctorId}
-                  onChange={(e) => handleDateOrTimeOrDoctorChange(confirmedDate, confirmedTimeSlot, e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                >
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>{d.name} ({d.specialty})</option>
-                  ))}
-                </select>
+                <TimeSlotPicker
+                  label="انتخاب ساعت قطعی (Time Slot):"
+                  value={confirmedTimeSlot}
+                  onChange={(newSlot) => handleDateOrTimeOrDoctorChange(confirmedDate, newSlot, confirmedDoctorId)}
+                  date={confirmedDate}
+                  doctorId={confirmedDoctorId}
+                  appointments={appointments}
+                />
               </div>
 
               {/* Real-time Conflict Alert */}

@@ -16,6 +16,18 @@ export const NewPatientModal: React.FC = () => {
   const [emergencyName] = useState<string>('');
   const [emergencyPhone] = useState<string>('');
 
+  React.useEffect(() => {
+    if (isNewPatientOpen) {
+      setName('');
+      setMobile('');
+      setNationalId('');
+      setGender('female');
+      setPrimaryPractice('aesthetic');
+      setAllergiesStr('');
+      setMedicalNotes('');
+    }
+  }, [isNewPatientOpen]);
+
   if (!isNewPatientOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { CalendarDays, Globe, CalendarX } from 'lucide-react';
 import { TimeBlockGrid } from './TimeBlockGrid';
 import { OnlineRequestsTab } from './OnlineRequestsTab';
@@ -7,8 +7,9 @@ import { useClinic } from '../../context/ClinicContext';
 import { toFarsiDigits } from '../../utils/persianUtils';
 
 export const AppointmentsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'schedule' | 'online_requests' | 'canceled_no_replacement'>('schedule');
-  const { onlineRequests, appointments, scope } = useClinic();
+  const { appointmentsTab, setAppointmentsTab, onlineRequests, appointments, scope } = useClinic();
+  const activeTab = appointmentsTab;
+  const setActiveTab = setAppointmentsTab;
 
   const pendingRequests = onlineRequests.filter(r => r.status === 'pending').length;
   const canceledNoReplacementCount = appointments.filter(a => {
@@ -18,7 +19,7 @@ export const AppointmentsView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      
+
       {/* Top Bar Switcher Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
@@ -31,11 +32,10 @@ export const AppointmentsView: React.FC = () => {
         <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
           <button
             onClick={() => setActiveTab('schedule')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'schedule'
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'schedule'
                 ? 'bg-white text-indigo-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
-            }`}
+              }`}
           >
             <CalendarDays className="w-4 h-4" />
             <span>تقویم زمانی نوبت‌ها</span>
@@ -43,11 +43,10 @@ export const AppointmentsView: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('online_requests')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'online_requests'
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'online_requests'
                 ? 'bg-white text-indigo-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
-            }`}
+              }`}
           >
             <Globe className="w-4 h-4" />
             <span>درخواست‌های آنلاین</span>
@@ -60,11 +59,10 @@ export const AppointmentsView: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('canceled_no_replacement')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'canceled_no_replacement'
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'canceled_no_replacement'
                 ? 'bg-white text-rose-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
-            }`}
+              }`}
           >
             <CalendarX className="w-4 h-4 text-rose-600" />
             <span>لغوشده بدون جایگزین</span>

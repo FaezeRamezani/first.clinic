@@ -18,7 +18,7 @@ interface PatientDetailModalProps {
 }
 
 export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient, onClose }) => {
-  const { appointments, transactions, openPaymentCollection, setIsNewAppointmentOpen } = useClinic();
+  const { appointments, transactions, openPaymentCollection, openNewAppointment } = useClinic();
   
   const [activeTab, setActiveTab] = useState<'basic' | 'appointments' | 'ledger' | 'treatments'>('ledger');
   const [newDoctorNote, setNewDoctorNote] = useState<string>('');
@@ -262,9 +262,9 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                 <button
                   onClick={() => {
                     onClose();
-                    setIsNewAppointmentOpen(true);
+                    openNewAppointment({ patient });
                   }}
-                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-xs"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
                 >
                   + رزرو نوبت جدید
                 </button>

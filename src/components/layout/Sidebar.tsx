@@ -1,32 +1,30 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  CalendarDays, 
-  BellRing, 
-  Users, 
-  Wallet, 
-  Tag, 
-  Settings, 
-  Sparkles, 
-  Stethoscope, 
+import {
+  LayoutDashboard,
+  CalendarDays,
+  BellRing,
+  Users,
+  Wallet,
+  Tag,
+  Settings,
+  Sparkles,
+  Stethoscope,
   Building2,
   ChevronLeft,
   Calendar,
-  UserPlus,
   Plus
 } from 'lucide-react';
 import { useClinic } from '../../context/ClinicContext';
 
 export const Sidebar: React.FC = () => {
-  const { 
-    activeView, 
-    setActiveView, 
-    scope, 
-    onlineRequests, 
-    followUps, 
+  const {
+    activeView,
+    setActiveView,
+    scope,
+    onlineRequests,
+    followUps,
     appointments,
-    setIsNewAppointmentOpen,
-    setIsNewPatientOpen
+    setIsNewAppointmentOpen
   } = useClinic();
 
   // Calculate badge counts
@@ -121,7 +119,7 @@ export const Sidebar: React.FC = () => {
   return (
     <aside className="w-64 bg-white border-l border-slate-200 flex flex-col justify-between h-[calc(100vh-4rem)] sticky top-16 shrink-0 z-20 overflow-y-auto">
       <div className="p-3.5 space-y-4">
-        
+
         {/* Practice Scope Indicator */}
         <div className={`p-3 rounded-xl ${currentScope.bg} border ${currentScope.border} shadow-2xs space-y-1.5 transition-all duration-200`}>
           <div className="flex items-center justify-between">
@@ -149,7 +147,7 @@ export const Sidebar: React.FC = () => {
               <span>ثبت سریع</span>
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="grid gap-1.5">
             <button
               onClick={() => setIsNewAppointmentOpen(true)}
               className="flex items-center justify-center gap-1.5 px-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
@@ -158,13 +156,13 @@ export const Sidebar: React.FC = () => {
               <span>نوبت جدید</span>
             </button>
 
-            <button
+            {/*<button
               onClick={() => setIsNewPatientOpen(true)}
               className="flex items-center justify-center gap-1.5 px-2 py-2 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5 text-teal-600" />
               <span>بیمار جدید</span>
-            </button>
+            </button>*/}
           </div>
         </div>
 
@@ -180,11 +178,10 @@ export const Sidebar: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => setActiveView(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${isActive
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
               >
                 <div className="flex items-center gap-2.5">
                   <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />

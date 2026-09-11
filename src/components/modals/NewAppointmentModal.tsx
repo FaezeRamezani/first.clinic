@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { X, UserPlus, Search, UserCheck, Calendar, Clock, Check, Stethoscope, Sparkles, RefreshCw } from 'lucide-react';
+import { X, UserPlus, Search, UserCheck, Calendar, Check, Stethoscope, Sparkles, RefreshCw } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
 import { getTodayJalaliDate, toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
@@ -61,16 +61,18 @@ export const NewAppointmentModal: React.FC = () => {
       }
 
       // 2. Set Doctor, Date, TimeSlot from prefill if present
-      const initialDocId = newAppointmentPrefill?.doctorId || doctors[0]?.id || '';
+      const initialDocId = newAppointmentPrefill?.doctorId || '';
       setDoctorId(initialDocId);
-      if (newAppointmentPrefill?.date) setDate(newAppointmentPrefill.date);
-      if (newAppointmentPrefill?.timeSlot) setTimeSlot(toFarsiDigits(newAppointmentPrefill.timeSlot));
+      setDate(newAppointmentPrefill?.date || getTodayJalaliDate());
+      setTimeSlot(newAppointmentPrefill?.timeSlot ? toFarsiDigits(newAppointmentPrefill.timeSlot) : '۱۰:۰۰');
 
       setServiceId('');
+      setNotes('');
       setPatientSearchTerm('');
       setNewPatientName('');
       setNewPatientMobile('');
       setConflictError('');
+      setPatientTypeChoice('existing');
     }
   }, [isNewAppointmentOpen, newAppointmentPrefill, selectedPatient, doctors]);
 
@@ -84,7 +86,7 @@ export const NewAppointmentModal: React.FC = () => {
     ? services.filter(s => s.practice === selectedDoctorObj.practice && s.active)
     : [];
 
-  // Handle Doctor Change with Service Reset logic (Point 4)
+  // Handle Doctor Change with Service Reset logic (Section 4)
   const handleDoctorChange = (newDocId: string) => {
     const newDoc = doctors.find(d => d.id === newDocId);
     if (newDoc) {
@@ -93,6 +95,8 @@ export const NewAppointmentModal: React.FC = () => {
       if (!isCurrentServiceValid) {
         setServiceId('');
       }
+    } else {
+      setServiceId('');
     }
     setDoctorId(newDocId);
     handleDateOrTimeOrDoctorChange(date, timeSlot, newDocId);
@@ -356,45 +360,50 @@ export const NewAppointmentModal: React.FC = () => {
               )}
             </div>
 
-            {/* Read-Only Slot Banner (When booking directly from Calendar Time Grid slot) */}
-            {isSlotBooking && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2 text-amber-950 font-bold text-xs">
-                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>زمان انتخاب‌شده از جدول زمانی: <strong className="text-indigo-700 dir-ltr inline-block">{toFarsiDigits(date)} - {toFarsiDigits(timeSlot)}</strong></span>
+            {/* SECTION 1: READ-ONLY SLOT BOOKING BANNER (When clicked from Calendar slot) */}
+            {isSlotBooking ? (
+              <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-1.5 font-bold text-xs text-amber-950">
+                <div className="flex items-center justify-between">
+                  <span>پزشک: <strong className="text-slate-900">{selectedDoctorObj?.name || '-'}</strong> ({selectedDoctorObj?.specialty || ''})</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-amber-200 text-amber-900 rounded-md font-extrabold">مشخص‌شده از Slot</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-700 text-[11px] pt-1 border-t border-amber-200/60">
+                  <span>تاریخ: <strong className="dir-ltr inline-block text-slate-900">{toFarsiDigits(date)}</strong></span>
+                  <span>ساعت: <strong className="dir-ltr inline-block text-slate-900">{toFarsiDigits(timeSlot)}</strong></span>
+                </div>
+              </div>
+            ) : (
+              /* DOCTOR SELECTION (Only when not booking from slot) */
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">پزشک معالج / مطب:</label>
+                {isRescheduleMode ? (
+                  <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl font-bold text-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {selectedDoctorObj?.practice === 'aesthetic' ? (
+                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                      ) : (
+                        <Stethoscope className="w-4 h-4 text-teal-600" />
+                      )}
+                      <span>{selectedDoctorObj?.name || 'پزشک فعلی'} ({selectedDoctorObj?.specialty})</span>
+                    </div>
+                    <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px] font-extrabold">پزشک ثابت</span>
+                  </div>
+                ) : (
+                  <select
+                    value={doctorId}
+                    onChange={(e) => handleDoctorChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                  >
+                    <option value="">-- انتخاب پزشک معالج --</option>
+                    {doctors.map(d => (
+                      <option key={d.id} value={d.id}>{d.name} ({d.specialty})</option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
 
-            {/* FORM ORDER STEP 1: DOCTOR SELECTION */}
-            {/* If Rescheduling, Doctor is FIXED and Read-Only (Point 2) */}
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">پزشک معالج / مطب:</label>
-              {isRescheduleMode ? (
-                <div className="p-3 bg-slate-100 border border-slate-300 rounded-xl font-bold text-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {selectedDoctorObj?.practice === 'aesthetic' ? (
-                      <Sparkles className="w-4 h-4 text-indigo-600" />
-                    ) : (
-                      <Stethoscope className="w-4 h-4 text-teal-600" />
-                    )}
-                    <span>{selectedDoctorObj?.name || 'پزشک فعلی'} ({selectedDoctorObj?.specialty})</span>
-                  </div>
-                  <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px] font-extrabold">پزشک ثابت</span>
-                </div>
-              ) : (
-                <select
-                  value={doctorId}
-                  onChange={(e) => handleDoctorChange(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
-                >
-                  <option value="">-- انتخاب پزشک --</option>
-                  {doctors.map(d => (
-                    <option key={d.id} value={d.id}>{d.name} ({d.specialty})</option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            {/* FORM ORDER STEP 2: SERVICE SELECTION (Bound to Doctor/Practice & Disabled if no doctor) */}
+            {/* SECTION 4: SERVICE SELECTION (Bound to Doctor/Practice & Disabled if no doctor) */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">خدمت درخواستی (وابسته به پزشک):</label>
               <select
@@ -408,7 +417,7 @@ export const NewAppointmentModal: React.FC = () => {
                 }`}
               >
                 {!doctorId ? (
-                  <option value="">[ابتدا پزشک را انتخاب کنید]</option>
+                  <option value="">ابتدا پزشک را انتخاب کنید</option>
                 ) : (
                   <>
                     <option value="">ویزیت / مشاوره عمومی</option>
@@ -418,29 +427,34 @@ export const NewAppointmentModal: React.FC = () => {
                   </>
                 )}
               </select>
+              {!doctorId && (
+                <p className="text-[11px] text-amber-700 font-medium mt-1">⚠️ ابتدا پزشک را انتخاب کنید تا خدمات مرتبط نمایش داده شوند.</p>
+              )}
             </div>
 
-            {/* FORM ORDER STEP 3: DATE SELECTION (JalaliDatePicker) */}
-            <div>
-              <JalaliDatePicker
-                label="تاریخ نوبت (شمسی):"
-                value={date}
-                onChange={(newDate) => handleDateOrTimeOrDoctorChange(newDate || getTodayJalaliDate(), timeSlot, doctorId)}
-              />
-            </div>
-
-            {/* FORM ORDER STEP 4: TIME SELECTION (TimeSlotPicker) — Hidden if slot was clicked directly from Grid */}
+            {/* DATE & TIME SELECTION (Only rendered when NOT slot booking) */}
             {!isSlotBooking && (
-              <div>
-                <TimeSlotPicker
-                  value={timeSlot}
-                  onChange={(newSlot) => handleDateOrTimeOrDoctorChange(date, newSlot, doctorId)}
-                  date={date}
-                  doctorId={doctorId}
-                  appointments={appointments}
-                  excludeAppointmentId={newAppointmentPrefill?.previousAppointmentId}
-                />
-              </div>
+              <>
+                <div>
+                  <JalaliDatePicker
+                    label="تاریخ نوبت (شمسی):"
+                    value={date}
+                    minDate={getTodayJalaliDate()}
+                    onChange={(newDate) => handleDateOrTimeOrDoctorChange(newDate || getTodayJalaliDate(), timeSlot, doctorId)}
+                  />
+                </div>
+
+                <div>
+                  <TimeSlotPicker
+                    value={timeSlot}
+                    onChange={(newSlot) => handleDateOrTimeOrDoctorChange(date, newSlot, doctorId)}
+                    date={date}
+                    doctorId={doctorId}
+                    appointments={appointments}
+                    excludeAppointmentId={newAppointmentPrefill?.previousAppointmentId}
+                  />
+                </div>
+              </>
             )}
 
             {/* Conflict Warning */}

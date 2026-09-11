@@ -10,6 +10,7 @@ interface JalaliDatePickerProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  minDate?: string; // Jalali date string e.g. "۱۴۰۵-۰۶-۱۶" or "1405-06-16"
 }
 
 const jalaliMonths = [
@@ -25,7 +26,8 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
   label,
   placeholder = 'انتخاب تاریخ شمسی',
   className = '',
-  disabled = false
+  disabled = false,
+  minDate
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -94,10 +96,17 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
   // Selected date normalized for highlight check
   const normalizedSelected = value ? toEnglishDigits(value).trim().replace(/\//g, '-') : '';
   const normalizedToday = moment().locale('fa').format('jYYYY-jMM-jDD');
+  const normalizedMinDate = minDate ? toEnglishDigits(minDate).trim().replace(/\//g, '-') : '';
 
   const handleSelectDay = (dayNum: number) => {
     const monthStr = (jMonth + 1).toString().padStart(2, '0');
     const dayStr = dayNum.toString().padStart(2, '0');
+    const currentIso = `${jYear}-${monthStr}-${dayStr}`;
+
+    if (normalizedMinDate && currentIso < normalizedMinDate) {
+      return;
+    }
+
     const dateFormatted = toFarsiDigits(`${jYear}-${monthStr}-${dayStr}`);
     onChange(dateFormatted);
     setIsOpen(false);
@@ -194,18 +203,22 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
 
               const isSelected = normalizedSelected === currentIso;
               const isToday = normalizedToday === currentIso;
+              const isDisabled = Boolean(normalizedMinDate && currentIso < normalizedMinDate);
 
               return (
                 <button
                   key={dayNum}
                   type="button"
+                  disabled={isDisabled}
                   onClick={() => handleSelectDay(dayNum)}
-                  className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-indigo-600 text-white shadow-2xs font-extrabold scale-105'
-                      : isToday
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold'
-                        : 'hover:bg-slate-100 text-slate-700'
+                  className={`p-1.5 rounded-lg text-xs font-bold transition-all ${
+                    isDisabled
+                      ? 'text-slate-300 opacity-40 cursor-not-allowed pointer-events-none hover:bg-transparent'
+                      : isSelected
+                        ? 'bg-indigo-600 text-white shadow-2xs font-extrabold scale-105 cursor-pointer'
+                        : isToday
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold cursor-pointer'
+                          : 'hover:bg-slate-100 text-slate-700 cursor-pointer'
                   }`}
                 >
                   {toFarsiDigits(dayNum)}
@@ -218,13 +231,19 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
           <div className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center text-[10px]">
             <button
               type="button"
+              disabled={Boolean(normalizedMinDate && normalizedToday < normalizedMinDate)}
               onClick={() => {
+                if (normalizedMinDate && normalizedToday < normalizedMinDate) return;
                 const todayM = moment().locale('fa');
                 setViewMoment(todayM);
                 onChange(toFarsiDigits(todayM.format('jYYYY-jMM-jDD')));
                 setIsOpen(false);
               }}
-              className="text-indigo-600 font-bold hover:underline cursor-pointer"
+              className={`font-bold ${
+                normalizedMinDate && normalizedToday < normalizedMinDate
+                  ? 'text-slate-300 cursor-not-allowed opacity-50'
+                  : 'text-indigo-600 hover:underline cursor-pointer'
+              }`}
             >
               انتخاب امروز ({toFarsiDigits(normalizedToday)})
             </button>

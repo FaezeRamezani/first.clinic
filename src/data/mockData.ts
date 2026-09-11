@@ -1,4 +1,9 @@
 import type { Doctor, ServiceItem, Patient, Appointment, OnlineRequest, FinancialTransaction, FollowUpTask, ClinicExpense } from '../types';
+import { getTodayJalaliDate, getJalaliDateOffset } from '../utils/persianUtils';
+
+const today = getTodayJalaliDate();
+const yesterday = getJalaliDateOffset(today, -1);
+const tomorrow = getJalaliDateOffset(today, 1);
 
 export const initialDoctors: Doctor[] = [
   {
@@ -193,7 +198,7 @@ export const initialPatients: Patient[] = [
 ];
 
 export const initialAppointments: Appointment[] = [
-  // Today's appointments (1405-06-16)
+  // Today's appointments (relative to REAL TODAY)
   {
     id: 'apt-1',
     patientId: 'pat-1',
@@ -203,10 +208,11 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
     practice: 'aesthetic',
-    date: '۱۴۰۵-۰۶-۱۶',
+    date: today,
     timeSlot: '۱۰:۰۰',
     duration: 30,
     status: 'checked_in',
+    presenceStatus: 'present',
     notes: 'حاضر در انتظار تزریق بوتاکس دیسپورت',
     serviceId: 'srv-1',
     serviceName: 'بوتاکس کامل صورت (دیسپورت)',
@@ -221,10 +227,11 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
     practice: 'dental',
-    date: '۱۴۰۵-۰۶-۱۶',
+    date: today,
     timeSlot: '۱۰:۳۰',
     duration: 60,
     status: 'pending',
+    presenceStatus: 'pending',
     notes: 'نوبت کاشت ایمپلنت فک بالا',
     serviceId: 'srv-10',
     serviceName: 'کاشت ایمپلنت سوئیسی',
@@ -239,10 +246,11 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
     practice: 'aesthetic',
-    date: '۱۴۰۵-۰۶-۱۶',
+    date: today,
     timeSlot: '۱۱:۳۰',
     duration: 60,
     status: 'completed',
+    presenceStatus: 'present',
     notes: 'فیشیال انجام شد و بیعانه ثبت گردید',
     serviceId: 'srv-3',
     serviceName: 'پاکسازی و فیشیال تخصصی',
@@ -257,10 +265,11 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
     practice: 'dental',
-    date: '۱۴۰۵-۰۶-۱۶',
+    date: today,
     timeSlot: '۱۲:۳۰',
     duration: 30,
     status: 'pending',
+    presenceStatus: 'pending',
     notes: 'جرم‌گیری و بروساژ دوره جدید',
     serviceId: 'srv-8',
     serviceName: 'جرم‌گیری و بروساژ دو فک',
@@ -275,16 +284,17 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
     practice: 'dental',
-    date: '۱۴۰۵-۰۶-۱۶',
+    date: today,
     timeSlot: '۱۶:۰۰',
     duration: 45,
     status: 'pending',
+    presenceStatus: 'pending',
     notes: 'قالب‌گیری روکش زارکونیا',
     serviceId: 'srv-9',
     serviceName: 'روکش تمام سرامیک زارکونیا',
     cabinetNumber: 'یونیت دندانپزشکی ۲'
   },
-  // Past unsettled appointment (Yesterday)
+  // Past appointments (Yesterday)
   {
     id: 'apt-6',
     patientId: 'pat-6',
@@ -294,11 +304,12 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
     practice: 'aesthetic',
-    date: '۱۴۰۵-۰۶-۱۵',
+    date: yesterday,
     timeSlot: '۱۷:۰۰',
     duration: 45,
-    status: 'unsettled',
-    notes: 'تزریق ژل انجام شد ولی مبلغ توسط منشی تسویه نگردید',
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'نوبت دیروز - هنوز تعیین تکلیف نشده (نیازمند پیگیری)',
     serviceId: 'srv-2',
     serviceName: 'تزریق ژل لب (۱ سی‌سی)',
     cabinetNumber: 'اتاق پوست ۱'
@@ -312,14 +323,72 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
     practice: 'dental',
-    date: '۱۴۰۵-۰۶-۱۵',
+    date: yesterday,
     timeSlot: '۱۸:۰۰',
     duration: 60,
-    status: 'unsettled',
-    notes: 'عصب‌کشی کانال ۲ انجام شد - تسویه بلاتکلیف',
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'عصب‌کشی انجام شد و تسویه گردید',
     serviceId: 'srv-7',
     serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
     cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-8',
+    patientId: 'pat-8',
+    patientName: 'نیلوفر صادقی',
+    patientMobile: '۰۹۳۵۱۱۱۲۲۳۳',
+    fileNumber: 'CL-1008',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: yesterday,
+    timeSlot: '۱۵:۰۰',
+    duration: 30,
+    status: 'canceled',
+    cancellationType: 'no_replacement',
+    cancellationReason: 'انصراف بیمار به دلیل عدم امکان حضور',
+    canceledAt: yesterday,
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+  // Future appointments (Tomorrow)
+  {
+    id: 'apt-9',
+    patientId: 'pat-10',
+    patientName: 'الهام شریفی',
+    patientMobile: '۰۹۳۷۴۴۴۵۵۶۶',
+    fileNumber: 'CL-1010',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: tomorrow,
+    timeSlot: '۰۹:۳۰',
+    duration: 45,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'تزریق ژل خط خنده و گونه',
+    serviceId: 'srv-2',
+    serviceName: 'تزریق ژل لب (۱ سی‌سی)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+  {
+    id: 'apt-10',
+    patientId: 'pat-9',
+    patientName: 'کامران باقری',
+    patientMobile: '۰۹۳۶۷۷۷۸۸۹۹',
+    fileNumber: 'CL-1009',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: tomorrow,
+    timeSlot: '۱۰:۳۰',
+    duration: 45,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'مشاوره کامپوزیت فک بالا',
+    serviceId: 'srv-6',
+    serviceName: 'کامپوزیت ونیر هر دندان',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
   }
 ];
 
@@ -332,11 +401,11 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'aesthetic',
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
-    requestedDate: '۱۴۰۵-۰۶-۱۸',
+    requestedDate: tomorrow,
     requestedTimeSlot: '۱۶:۳۰',
     notes: 'درخواست بوتاکس صورت و مشاوره پوست',
     status: 'pending',
-    createdAt: '۱۴۰۵/۰۶/۱۵ - ۲۱:۴۰'
+    createdAt: `${yesterday} - ۲۱:۴۰`
   },
   {
     id: 'req-2',
@@ -346,11 +415,11 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'dental',
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
-    requestedDate: '۱۴۰۵-۰۶-۱۷',
+    requestedDate: today,
     requestedTimeSlot: '۱۱:۰۰',
     notes: 'درد شدید دندان آسیاب پایین راست',
     status: 'pending',
-    createdAt: '۱۴۰۵/۰۶/۱۶ - ۰۷:۱۵'
+    createdAt: `${today} - ۰۷:۱۵`
   },
   {
     id: 'req-3',
@@ -360,11 +429,11 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'aesthetic',
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
-    requestedDate: '۱۴۰۵-۰۶-۱۹',
+    requestedDate: getJalaliDateOffset(today, 2),
     requestedTimeSlot: '۱۸:۰۰',
     notes: 'تزریق ژل لب سبک ناتشورال',
     status: 'pending',
-    createdAt: '۱۴۰۵/۰۶/۱۶ - ۰۹:۳۰'
+    createdAt: `${today} - ۰۹:۳۰`
   },
   {
     id: 'req-4',
@@ -374,11 +443,11 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'dental',
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
-    requestedDate: '۱۴۰۵-۰۶-۲۰',
+    requestedDate: getJalaliDateOffset(today, 3),
     requestedTimeSlot: '۰۹:۳۰',
     notes: 'مشاوره کامپوزیت ۱۰ واحد فک بالا',
     status: 'approved',
-    createdAt: '۱۴۰۵/۰۶/۱۴ - ۱۵:۱۰'
+    createdAt: `${yesterday} - ۱۵:۱۰`
   }
 ];
 
@@ -390,7 +459,7 @@ export const initialTransactions: FinancialTransaction[] = [
     fileNumber: 'CL-1003',
     appointmentId: 'apt-3',
     practice: 'aesthetic',
-    date: '۱۴۰۵-۰۶-۱۶',
+    date: today,
     serviceName: 'پاکسازی و فیشیال تخصصی',
     totalCost: 1200000,
     discount: 200000,
@@ -407,7 +476,7 @@ export const initialTransactions: FinancialTransaction[] = [
     patientName: 'مریم حسینی',
     fileNumber: 'CL-1001',
     practice: 'aesthetic',
-    date: '۱۴۰۵-۰۶-۱۰',
+    date: getJalaliDateOffset(today, -6),
     serviceName: 'تزریق ژل گونه و لب',
     totalCost: 9000000,
     discount: 500000,
@@ -416,7 +485,7 @@ export const initialTransactions: FinancialTransaction[] = [
     remainingDebt: 2500000,
     paymentMethod: 'pos_aesthetic',
     posAccount: 'کارتخوان بانک سامان (مطب زیبایی)',
-    debtDueDate: '۱۴۰۵-۰۶-۱۶', // Due today!
+    debtDueDate: today,
     notes: 'مبلغ ۲.۵ میلیون بدهی باقی‌مانده سررسید امروز'
   },
   {
@@ -425,7 +494,7 @@ export const initialTransactions: FinancialTransaction[] = [
     patientName: 'علیرضا محمدی',
     fileNumber: 'CL-1002',
     practice: 'dental',
-    date: '۱۴۰۵-۰۵-۲۵',
+    date: getJalaliDateOffset(today, -15),
     serviceName: 'مرحله اول ایمپلنت سوئیسی',
     totalCost: 16500000,
     discount: 500000,

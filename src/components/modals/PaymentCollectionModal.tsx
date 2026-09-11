@@ -13,10 +13,19 @@ export const PaymentCollectionModal: React.FC = () => {
 
   const pat = selectedPatientForPayment;
 
-  const [amount, setAmount] = useState<number>(pat ? Math.abs(pat.balance) : 0);
+  const [amount, setAmount] = useState<number>(0);
   const [method, setMethod] = useState<'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer'>('pos_aesthetic');
   const [posAccount, setPosAccount] = useState<string>('کارتخوان بانک سامان (مطب زیبایی)');
   const [notes, setNotes] = useState<string>('وصول قسط / بدهی بیمار');
+
+  React.useEffect(() => {
+    if (isPaymentCollectionOpen && pat) {
+      setAmount(Math.abs(pat.balance));
+      setMethod('pos_aesthetic');
+      setPosAccount('کارتخوان بانک سامان (مطب زیبایی)');
+      setNotes('وصول قسط / بدهی بیمار');
+    }
+  }, [isPaymentCollectionOpen, pat]);
 
   if (!isPaymentCollectionOpen || !pat) return null;
 

@@ -7,6 +7,12 @@ export const GlobalSearchModal: React.FC = () => {
   const { isGlobalSearchOpen, setIsGlobalSearchOpen, patients, setSelectedPatient } = useClinic();
   const [query, setQuery] = useState<string>('');
 
+  React.useEffect(() => {
+    if (isGlobalSearchOpen) {
+      setQuery('');
+    }
+  }, [isGlobalSearchOpen]);
+
   if (!isGlobalSearchOpen) return null;
 
   const results = query.trim() === '' ? [] : patients.filter(p => {

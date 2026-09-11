@@ -16,6 +16,13 @@ export const FollowUpResultModal: React.FC = () => {
   const [status, setStatus] = useState<FollowUpStatus>('called_confirmed');
   const [resultNote, setResultNote] = useState<string>('تماس برقرار شد و بیمار تایید نمود.');
 
+  React.useEffect(() => {
+    if (isFollowUpResultOpen && task) {
+      setStatus('called_confirmed');
+      setResultNote('تماس برقرار شد و بیمار تایید نمود.');
+    }
+  }, [isFollowUpResultOpen, task]);
+
   if (!isFollowUpResultOpen || !task) return null;
 
   const handleSubmit = (e: React.FormEvent) => {

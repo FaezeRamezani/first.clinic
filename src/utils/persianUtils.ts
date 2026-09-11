@@ -71,6 +71,24 @@ export function isDueOrOverdue(dueDateStr?: string): boolean {
   return normalizedDueDate <= normalizedToday;
 }
 
+export function isPastUnfinalizedAppointment(apt: { date: string; status: string; presenceStatus?: string }): boolean {
+  if (!apt || !apt.date) return false;
+  const normTarget = toEnglishDigits(apt.date).trim().replace(/\//g, '-');
+  const normToday = toEnglishDigits(getTodayJalaliDate()).trim().replace(/\//g, '-');
+  
+  if (normTarget >= normToday) return false;
+
+  // Finalized criteria: status is completed, canceled, rescheduled, OR presenceStatus is absent
+  if (apt.status === 'completed' || apt.status === 'canceled' || apt.status === 'rescheduled') {
+    return false;
+  }
+  if (apt.presenceStatus === 'absent') {
+    return false;
+  }
+
+  return true;
+}
+
 export function getJalaliDaysOfWeek(): { day: string; date: string }[] {
   const m = moment().locale('fa');
   const days: { day: string; date: string }[] = [];
@@ -84,3 +102,4 @@ export function getJalaliDaysOfWeek(): { day: string; date: string }[] {
   }
   return days;
 }
+

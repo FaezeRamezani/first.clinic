@@ -13,6 +13,16 @@ export const NewExpenseModal: React.FC = () => {
   const [receiptNumber, setReceiptNumber] = useState<string>('');
   const [description] = useState<string>('');
 
+  React.useEffect(() => {
+    if (isNewExpenseOpen) {
+      setTitle('');
+      setCategory('consumables');
+      setAmount('');
+      setPractice('aesthetic');
+      setReceiptNumber('');
+    }
+  }, [isNewExpenseOpen]);
+
   if (!isNewExpenseOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {

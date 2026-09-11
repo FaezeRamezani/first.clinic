@@ -20,7 +20,7 @@ export const PatientDirectoryView: React.FC = () => {
     setSelectedPatient, 
     selectedPatient, 
     setIsNewPatientOpen, 
-    setIsNewAppointmentOpen,
+    openNewAppointment,
     openPaymentCollection
   } = useClinic();
 
@@ -173,8 +173,8 @@ export const PatientDirectoryView: React.FC = () => {
                       </button>
 
                       <button
-                        onClick={() => setIsNewAppointmentOpen(true)}
-                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1"
+                        onClick={() => openNewAppointment({ patient })}
+                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                       >
                         <CalendarPlus className="w-3.5 h-3.5" />
                         <span>نوبت</span>

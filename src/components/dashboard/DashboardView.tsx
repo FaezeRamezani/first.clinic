@@ -1,36 +1,40 @@
 import React from 'react';
-import { 
-  Users, 
-  AlertCircle, 
-  HelpCircle, 
-  Globe, 
-  CheckCircle2, 
-  Clock, 
-  Sparkles, 
-  Stethoscope, 
+import {
+  Users,
+  AlertCircle,
+  HelpCircle,
+  Globe,
+  CheckCircle2,
+  Sparkles,
+  Stethoscope,
   Receipt,
   UserCheck,
   CreditCard,
   PhoneCall,
   ArrowRight,
-  CalendarX
+  CalendarX,
+  AlertTriangle,
+  XCircle
 } from 'lucide-react';
 import { useClinic } from '../../context/ClinicContext';
-import { formatCurrency, toFarsiDigits, getTodayJalaliDate } from '../../utils/persianUtils';
+import { formatCurrency, toFarsiDigits, getTodayJalaliDate, toEnglishDigits, isPastUnfinalizedAppointment } from '../../utils/persianUtils';
+import type { PresenceStatus, Appointment } from '../../types';
 
 export const DashboardView: React.FC = () => {
-  const { 
-    scope, 
-    appointments, 
-    patients, 
+  const {
+    scope,
+    appointments,
+    patients,
     onlineRequests,
     followUps,
-    updateAppointmentStatus, 
+    updateAppointmentPresenceStatus,
     openQuickCheckout,
     openPaymentCollection,
     openCancelAppointment,
+    openPatientProfile,
     setActiveView,
-    setRemindersTab
+    setRemindersTab,
+    setAppointmentsTab
   } = useClinic();
 
   // 1. Filter data by current global practice scope
@@ -39,18 +43,25 @@ export const DashboardView: React.FC = () => {
   const filteredOnlineRequests = onlineRequests.filter(r => scope === 'unified' || r.targetPractice === scope);
   const filteredFollowUps = followUps.filter(f => scope === 'unified' || f.practice === scope);
 
-  // 2. Operational Summary Metrics
+  // 2. Operational Summary Metrics & Strict Real System TODAY Filter (Section 13, 15)
   const todayJalali = getTodayJalaliDate();
-  const todayAppointments = filteredAppointments.filter(a => a.date === todayJalali || a.date === '۱۴۰۵-۰۶-۱۶');
-  const checkedInCount = todayAppointments.filter(a => a.status === 'checked_in').length;
-  const pendingCount = todayAppointments.filter(a => a.status === 'pending').length;
+  const todayAppointments = filteredAppointments.filter(a => {
+    const normAptDate = toEnglishDigits(a.date).trim().replace(/\//g, '-');
+    const normTodayDate = toEnglishDigits(todayJalali).trim().replace(/\//g, '-');
+    return normAptDate === normTodayDate;
+  });
+
+  const activeAppointments = todayAppointments.filter(a => a.status !== 'completed' && a.status !== 'canceled' && a.status !== 'rescheduled');
+  const checkedInCount = activeAppointments.filter(a => a.presenceStatus ? a.presenceStatus === 'present' : a.status === 'checked_in').length;
+  const absentCount = activeAppointments.length - checkedInCount;
   const completedCount = todayAppointments.filter(a => a.status === 'completed').length;
 
   // Overdue debtor patients (only remaining debt > 0 / balance < 0, fully settled excluded)
   const overdueDebtors = filteredPatients.filter(p => p.balance < 0);
   const totalOverdueAmount = overdueDebtors.reduce((sum, p) => sum + Math.abs(p.balance), 0);
 
-  // Unsettled Visits (past days)
+  // Unsettled / Past Unfinalized Visits (Section 16 & 17)
+  const unfinalizedPastAppointments = filteredAppointments.filter(a => isPastUnfinalizedAppointment(a));
   const unsettledVisits = filteredAppointments.filter(a => a.status === 'unsettled');
 
   // Pending Online Requests
@@ -59,14 +70,120 @@ export const DashboardView: React.FC = () => {
   // Pending Secretary Tasks
   const pendingFollowUps = filteredFollowUps.filter(f => f.status === 'pending');
 
+  // Presence & Status Renderer for Dashboard Table
+  const renderPresenceButton = (apt: Appointment) => {
+    if (apt.status === 'completed') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          <span>تکمیل</span>
+        </span>
+      );
+    }
+
+    if (apt.status === 'rescheduled') {
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+            <span>نوبت جدید</span>
+          </span>
+          {apt.cancellationReason && (
+            <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]">
+              {apt.cancellationReason}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    if (apt.status === 'canceled') {
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-bold">
+            <XCircle className="w-3 h-3 text-rose-600" />
+            <span>لغو شد</span>
+          </span>
+          {apt.cancellationReason && (
+            <span className="text-[10px] text-slate-500 font-medium truncate max-w-[130px]">
+              {apt.cancellationReason}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    const isPresent = apt.presenceStatus ? apt.presenceStatus === 'present' : apt.status === 'checked_in';
+
+    const handleTogglePresence = (e: React.MouseEvent) => {
+      e.stopPropagation();
+
+      const nextStatus: PresenceStatus = isPresent ? 'absent' : 'present';
+      updateAppointmentPresenceStatus(apt.id, nextStatus);
+    };
+
+    if (isPresent) {
+      return (
+        <button
+          type="button"
+          onClick={handleTogglePresence}
+          className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-extrabold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+          title='برای تغییر به "عدم حضور" کلیک کنید'
+        >
+          <UserCheck className="w-3 h-3 text-emerald-600" />
+          <span>حضور</span>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={handleTogglePresence}
+        className="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-900 border border-rose-300 font-extrabold rounded-lg text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+        title='برای تغییر به "حضور" کلیک کنید'
+      >
+        <XCircle className="w-3 h-3 text-rose-600" />
+        <span>عدم حضور</span>
+      </button>
+    );
+  };
+
   return (
     <div className="space-y-5 pb-12">
-      
+
+      {/* Section 16 & 17: Past Unfinalized Appointments Notification Alert Banner */}
+      {unfinalizedPastAppointments.length > 0 && (
+        <div
+          onClick={() => {
+            setRemindersTab('unsettled_visits');
+            setActiveView('reminders');
+          }}
+          className="bg-amber-50 border border-amber-300 p-3.5 rounded-2xl shadow-2xs flex items-center justify-between cursor-pointer hover:bg-amber-100/80 transition-all animate-in fade-in duration-150"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            <div>
+              <span className="font-extrabold text-amber-950 text-xs sm:text-sm">
+                ⚠️ {toFarsiDigits(unfinalizedPastAppointments.length)} نوبت گذشته هنوز تعیین تکلیف نشده‌اند.
+              </span>
+              <p className="text-[11px] text-amber-800 font-medium mt-0.5">
+                برای بررسی، تسویه یا تعیین تکلیف نهایی این پرونده‌های معوقه کلیک کنید.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-2xs shrink-0 flex items-center gap-1 transition-colors">
+            <span>مشاهده و پیگیری</span>
+            <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+          </span>
+        </div>
+      )}
+
       {/* Operational Summary Cards (Fully Clickable & Interactive) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        
+
         {/* Card 1: Today Appointments */}
-        <div 
+        <div
           onClick={() => setActiveView('appointments')}
           className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group"
         >
@@ -84,8 +201,8 @@ export const DashboardView: React.FC = () => {
               <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded">
                 {toFarsiDigits(checkedInCount)} حاضر
               </span>
-              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">
-                {toFarsiDigits(pendingCount)} منتظر
+              <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded">
+                {toFarsiDigits(absentCount)} عدم حضور
               </span>
               <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
                 {toFarsiDigits(completedCount)} انجام‌شده
@@ -95,7 +212,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Card 2: Overdue Debts */}
-        <div 
+        <div
           onClick={() => {
             setRemindersTab('overdue_debts');
             setActiveView('reminders');
@@ -119,7 +236,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Card 3: Unsettled Visits */}
-        <div 
+        <div
           onClick={() => {
             setRemindersTab('unsettled_visits');
             setActiveView('reminders');
@@ -143,8 +260,11 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Card 4: Online Requests */}
-        <div 
-          onClick={() => setActiveView('appointments')}
+        <div
+          onClick={() => {
+            setAppointmentsTab('online_requests');
+            setActiveView('appointments');
+          }}
           className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all group"
         >
           <div className="flex items-center justify-between">
@@ -164,7 +284,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Card 5: Secretary Tasks */}
-        <div 
+        <div
           onClick={() => {
             setRemindersTab('secretary_calls');
             setActiveView('reminders');
@@ -191,7 +311,7 @@ export const DashboardView: React.FC = () => {
 
       {/* Main Operational Tables Grid — Responsive 2 Columns (xl:grid-cols-2 min-w-0) */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 min-w-0">
-        
+
         {/* Table 1: Today's Appointments & Operational Flow */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 space-y-3 flex flex-col justify-between min-w-0">
           <div>
@@ -217,8 +337,8 @@ export const DashboardView: React.FC = () => {
                       <th className="py-2.5 px-3 whitespace-nowrap">ساعت</th>
                       <th className="py-2.5 px-3 whitespace-nowrap">بیمار و تماس</th>
                       <th className="py-2.5 px-3 whitespace-nowrap">شماره پرونده</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">مطب / پزشک</th>
-                      <th className="py-2.5 px-3 whitespace-nowrap">وضعیت</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">مطب</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">وضعیت حضور</th>
                       <th className="py-2.5 px-3 text-center whitespace-nowrap">عملیات</th>
                     </tr>
                   </thead>
@@ -226,8 +346,8 @@ export const DashboardView: React.FC = () => {
                     {todayAppointments.map((apt) => {
                       const isAesthetic = apt.practice === 'aesthetic';
                       // Clear visible warmer practice row tint
-                      const rowClass = isAesthetic 
-                        ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950' 
+                      const rowClass = isAesthetic
+                        ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950'
                         : 'bg-teal-100/70 hover:bg-teal-100/90 border-r-4 border-r-teal-600 text-teal-950';
 
                       return (
@@ -236,7 +356,13 @@ export const DashboardView: React.FC = () => {
                             {toFarsiDigits(apt.timeSlot)}
                           </td>
                           <td className="py-3 px-3 whitespace-nowrap">
-                            <p className="font-bold text-slate-900">{apt.patientName}</p>
+                            <p
+                              onClick={() => openPatientProfile(apt.patientId)}
+                              className="font-bold text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer transition-colors"
+                              title="مشاهده پرونده بیمار"
+                            >
+                              {apt.patientName}
+                            </p>
                             <p className="text-[11px] text-slate-700 font-semibold dir-ltr text-right">
                               {toFarsiDigits(apt.patientMobile)}
                             </p>
@@ -258,43 +384,14 @@ export const DashboardView: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <p className="text-[10px] text-slate-700 font-medium truncate max-w-[110px] mt-0.5">
-                              {apt.doctorName}
-                            </p>
                           </td>
+                          {/* 3-Step Presence Cycle Button (Section 10 & 11) */}
                           <td className="py-3 px-3 whitespace-nowrap">
-                            <div className="flex items-center gap-1">
-                              {apt.status === 'pending' && (
-                                <button
-                                  onClick={() => updateAppointmentStatus(apt.id, 'checked_in')}
-                                  className="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Clock className="w-3 h-3" />
-                                  <span>ثبت ورود</span>
-                                </button>
-                              )}
-                              {apt.status === 'checked_in' && (
-                                <span className="px-2 py-1 bg-emerald-200 text-emerald-900 font-bold rounded-lg text-[10px] flex items-center gap-1">
-                                  <UserCheck className="w-3 h-3" />
-                                  <span>حاضر</span>
-                                </span>
-                              )}
-                              {apt.status === 'completed' && (
-                                <span className="px-2 py-1 bg-slate-200 text-slate-700 font-bold rounded-lg text-[10px] flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                  <span>تسویه‌شده</span>
-                                </span>
-                              )}
-                              {apt.status === 'canceled' && (
-                                <span className="px-2 py-1 bg-rose-200 text-rose-900 font-bold rounded-lg text-[10px]">
-                                  لغوشده
-                                </span>
-                              )}
-                            </div>
+                            {renderPresenceButton(apt)}
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
-                              {apt.status !== 'completed' && apt.status !== 'canceled' && (
+                              {apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled' && (
                                 <>
                                   <button
                                     onClick={() => openQuickCheckout(apt)}
@@ -315,7 +412,13 @@ export const DashboardView: React.FC = () => {
                                 </>
                               )}
                               {apt.status === 'completed' && (
-                                <span className="text-[10px] text-slate-500 font-bold">تکمیل</span>
+                                <span className="text-[10px] text-slate-500 font-bold">تسویه‌شده</span>
+                              )}
+                              {apt.status === 'rescheduled' && (
+                                <span className="text-[10px] text-slate-500 font-bold">انتقال‌یافته</span>
+                              )}
+                              {apt.status === 'canceled' && (
+                                <span className="text-[10px] text-slate-500 font-bold">لغوشده</span>
                               )}
                             </div>
                           </td>
@@ -362,14 +465,20 @@ export const DashboardView: React.FC = () => {
                     {overdueDebtors.map((patient) => {
                       const isAesthetic = patient.primaryPractice === 'aesthetic';
                       // Clear visible warmer practice row tint
-                      const rowClass = isAesthetic 
-                        ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950' 
+                      const rowClass = isAesthetic
+                        ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950'
                         : 'bg-teal-100/70 hover:bg-teal-100/90 border-r-4 border-r-teal-600 text-teal-950';
 
                       return (
                         <tr key={patient.id} className={`${rowClass} transition-colors`}>
                           <td className="py-3 px-3 whitespace-nowrap">
-                            <p className="font-bold text-slate-900">{patient.name}</p>
+                            <p
+                              onClick={() => openPatientProfile(patient)}
+                              className="font-bold text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer transition-colors"
+                              title="مشاهده پرونده بیمار"
+                            >
+                              {patient.name}
+                            </p>
                             <p className="text-[11px] text-slate-700 font-semibold dir-ltr text-right">
                               {toFarsiDigits(patient.mobile)}
                             </p>
@@ -395,6 +504,14 @@ export const DashboardView: React.FC = () => {
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
+                              {/*<button
+                                onClick={() => openPatientProfile(patient)}
+                                className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                                title="مشاهده پرونده بیمار"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>پرونده</span>
+                              </button>*/}
                               <button
                                 onClick={() => openPaymentCollection(patient)}
                                 className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"

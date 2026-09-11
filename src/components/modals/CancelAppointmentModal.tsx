@@ -17,6 +17,14 @@ export const CancelAppointmentModal: React.FC = () => {
   const [selectedReason, setSelectedReason] = useState<string>('عدم پاسخگویی بیمار');
   const [customReasonNote, setCustomReasonNote] = useState<string>('');
 
+  React.useEffect(() => {
+    if (isCancelAppointmentOpen) {
+      setMode('reschedule');
+      setSelectedReason('عدم پاسخگویی بیمار');
+      setCustomReasonNote('');
+    }
+  }, [isCancelAppointmentOpen]);
+
   if (!isCancelAppointmentOpen || !selectedAppointmentForCancel) return null;
 
   const handleConfirm = () => {

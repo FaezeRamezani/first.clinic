@@ -19,8 +19,10 @@ import { NewPatientModal } from './components/modals/NewPatientModal';
 import { NewExpenseModal } from './components/modals/NewExpenseModal';
 import { CancelAppointmentModal } from './components/modals/CancelAppointmentModal';
 
+import { PatientDetailModal } from './components/patients/PatientDetailModal';
+
 const MainContent: React.FC = () => {
-  const { activeView } = useClinic();
+  const { activeView, selectedPatient, setSelectedPatient } = useClinic();
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -67,6 +69,14 @@ const MainContent: React.FC = () => {
       <NewPatientModal />
       <NewExpenseModal />
       <CancelAppointmentModal />
+
+      {/* Shared Global Patient Profile Detail Modal */}
+      {selectedPatient && (
+        <PatientDetailModal
+          patient={selectedPatient}
+          onClose={() => setSelectedPatient(null)}
+        />
+      )}
     </div>
   );
 };

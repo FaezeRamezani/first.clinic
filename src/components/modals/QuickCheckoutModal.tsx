@@ -4,13 +4,14 @@ import { formatCurrency, toFarsiDigits, getTodayJalaliDate, getJalaliDateOffset 
 import { X, AlertCircle, CheckCircle2, CalendarPlus } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
+import { SearchableServiceSelect } from '../common/SearchableServiceSelect';
 
 export const QuickCheckoutModal: React.FC = () => {
-  const { 
-    isQuickCheckoutOpen, 
-    setIsQuickCheckoutOpen, 
-    selectedAppointmentForCheckout, 
-    services, 
+  const {
+    isQuickCheckoutOpen,
+    setIsQuickCheckoutOpen,
+    selectedAppointmentForCheckout,
+    services,
     doctors,
     appointments,
     recordCheckout,
@@ -19,6 +20,11 @@ export const QuickCheckoutModal: React.FC = () => {
   } = useClinic();
 
   const apt = selectedAppointmentForCheckout;
+
+  // Filter services strictly by Appointment -> Doctor -> Practice
+  const currentDoctor = apt ? doctors.find(d => d.id === apt.doctorId) : undefined;
+  const targetPractice = currentDoctor ? currentDoctor.practice : (apt?.practice || 'aesthetic');
+  const validServices = services.filter(s => s.active !== false && s.practice === targetPractice);
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [totalCost, setTotalCost] = useState<number>(0);
@@ -37,27 +43,48 @@ export const QuickCheckoutModal: React.FC = () => {
   const [nextVisitError, setNextVisitError] = useState<string>('');
 
   useEffect(() => {
-    if (apt) {
-      const matchedService = services.find(s => s.id === apt.serviceId) || services[0];
+    if (isQuickCheckoutOpen && apt) {
+      const doc = doctors.find(d => d.id === apt.doctorId);
+      const scope = doc ? doc.practice : apt.practice;
+      const valid = services.filter(s => s.active !== false && s.practice === scope);
+
+      const matchedService = valid.find(s => s.id === apt.serviceId);
       if (matchedService) {
         setSelectedServiceId(matchedService.id);
         setTotalCost(matchedService.price);
         setPaidAmount(matchedService.price);
+      } else {
+        // Clear invalid or unset service
+        setSelectedServiceId('');
+        setTotalCost(0);
+        setPaidAmount(0);
       }
+      setDiscount(0);
       setPaymentMethod(apt.practice === 'aesthetic' ? 'pos_aesthetic' : 'pos_dental');
       setPosAccount(apt.practice === 'aesthetic' ? 'کارتخوان بانک سامان (مطب زیبایی)' : 'کارتخوان بانک پاسارگاد (مطب دندانپزشکی)');
+      setDebtDueDate(getJalaliDateOffset(getTodayJalaliDate(), 10));
+
+      // Always reset temporary follow-up / next visit states on open/appointment change
+      setIsFollowUpVisitEnabled(false);
+      setNextVisitDate(getJalaliDateOffset(getTodayJalaliDate(), 14));
+      setNextVisitTimeSlot('۱۰:۰۰');
       setNextVisitDoctorId(apt.doctorId);
+      setNextVisitError('');
     }
-  }, [apt, services]);
+  }, [isQuickCheckoutOpen, apt, services, doctors]);
 
   if (!isQuickCheckoutOpen || !apt) return null;
 
   const handleServiceChange = (srvId: string) => {
     setSelectedServiceId(srvId);
-    const srv = services.find(s => s.id === srvId);
+    const srv = validServices.find(s => s.id === srvId);
     if (srv) {
       setTotalCost(srv.price);
       setPaidAmount(srv.price);
+      setDiscount(0);
+    } else {
+      setTotalCost(0);
+      setPaidAmount(0);
       setDiscount(0);
     }
   };
@@ -82,8 +109,9 @@ export const QuickCheckoutModal: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const srv = services.find(s => s.id === selectedServiceId);
-    
+    const srv = validServices.find(s => s.id === selectedServiceId);
+    if (!srv) return;
+
     // Generate Current Payment Timestamp e.g. "۱۴:۳۵"
     const now = new Date();
     const currentTimestamp = toFarsiDigits(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }));
@@ -97,7 +125,7 @@ export const QuickCheckoutModal: React.FC = () => {
       practice: apt.practice,
       date: getTodayJalaliDate(),
       timestamp: currentTimestamp,
-      serviceName: srv?.name || 'خدمت تخصصی',
+      serviceName: srv.name,
       totalCost,
       discount,
       netCost,
@@ -135,7 +163,7 @@ export const QuickCheckoutModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
@@ -148,21 +176,16 @@ export const QuickCheckoutModal: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          
-          {/* Service Selector */}
+
+          {/* Service Searchable Selector */}
           <div>
             <label className="block font-bold text-slate-700 mb-1">انتخاب خدمت ارائه شده:</label>
-            <select
-              value={selectedServiceId}
-              onChange={(e) => handleServiceChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
-            >
-              {services
-                .filter(s => s.practice === apt.practice)
-                .map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({formatCurrency(s.price)})</option>
-                ))}
-            </select>
+            <SearchableServiceSelect
+              services={validServices}
+              selectedServiceId={selectedServiceId}
+              onChange={handleServiceChange}
+              placeholder="جستجوی خدمت..."
+            />
           </div>
 
           {/* Pricing Grid */}
@@ -277,6 +300,7 @@ export const QuickCheckoutModal: React.FC = () => {
                   <JalaliDatePicker
                     label="تاریخ ویزیت بعدی:"
                     value={nextVisitDate}
+                    minDate={getTodayJalaliDate()}
                     onChange={(d) => handleNextVisitChange(d || getTodayJalaliDate(), nextVisitTimeSlot, nextVisitDoctorId)}
                   />
 
@@ -321,12 +345,11 @@ export const QuickCheckoutModal: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={isFollowUpVisitEnabled && !!nextVisitError}
-              className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer ${
-                isFollowUpVisitEnabled && nextVisitError
+              disabled={!selectedServiceId || (isFollowUpVisitEnabled && !!nextVisitError)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer ${!selectedServiceId || (isFollowUpVisitEnabled && nextVisitError)
                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-              }`}
+                }`}
             >
               ثبت ویزیت و صدور صورتحساب
             </button>
@@ -338,3 +361,4 @@ export const QuickCheckoutModal: React.FC = () => {
     </div>
   );
 };
+

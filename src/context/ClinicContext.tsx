@@ -1,28 +1,28 @@
 import React, { createContext, useContext, useState } from 'react';
-import type { 
-  ClinicScope, 
-  UserRole, 
-  Doctor, 
-  ServiceItem, 
-  Patient, 
-  Appointment, 
-  AppointmentStatus, 
+import type {
+  ClinicScope,
+  UserRole,
+  Doctor,
+  ServiceItem,
+  Patient,
+  Appointment,
+  AppointmentStatus,
   PresenceStatus,
-  OnlineRequest, 
-  FinancialTransaction, 
-  FollowUpTask, 
+  OnlineRequest,
+  FinancialTransaction,
+  FollowUpTask,
   ClinicExpense,
-  FollowUpStatus 
+  FollowUpStatus
 } from '../types';
-import { 
-  initialDoctors, 
-  initialServices, 
-  initialPatients, 
-  initialAppointments, 
-  initialOnlineRequests, 
-  initialTransactions, 
-  initialFollowUps, 
-  initialExpenses 
+import {
+  initialDoctors,
+  initialServices,
+  initialPatients,
+  initialAppointments,
+  initialOnlineRequests,
+  initialTransactions,
+  initialFollowUps,
+  initialExpenses
 } from '../data/mockData';
 import { getTodayJalaliDate, toEnglishDigits } from '../utils/persianUtils';
 
@@ -42,6 +42,8 @@ interface ClinicContextType {
   setActiveView: (view: string) => void;
   remindersTab: 'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls';
   setRemindersTab: (tab: 'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls') => void;
+  appointmentsTab: 'schedule' | 'online_requests' | 'canceled_no_replacement';
+  setAppointmentsTab: (tab: 'schedule' | 'online_requests' | 'canceled_no_replacement') => void;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
 
@@ -56,11 +58,12 @@ interface ClinicContextType {
 
   selectedPatient: Patient | null;
   setSelectedPatient: (patient: Patient | null) => void;
+  openPatientProfile: (patientOrId: Patient | string) => void;
 
   // Modals state
   isGlobalSearchOpen: boolean;
   setIsGlobalSearchOpen: (open: boolean) => void;
-  
+
   isNewAppointmentOpen: boolean;
   setIsNewAppointmentOpen: (open: boolean) => void;
   newAppointmentPrefill: NewAppointmentPrefillData | null;
@@ -123,6 +126,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const [remindersTab, setRemindersTab] = useState<'today_visits' | 'overdue_debts' | 'unsettled_visits' | 'secretary_calls'>('overdue_debts');
+  const [appointmentsTab, setAppointmentsTab] = useState<'schedule' | 'online_requests' | 'canceled_no_replacement'>('schedule');
   const [userRole, setUserRole] = useState<UserRole>('receptionist');
 
   const [doctors] = useState<Doctor[]>(initialDoctors);
@@ -140,7 +144,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState<boolean>(false);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState<boolean>(false);
   const [newAppointmentPrefill, setNewAppointmentPrefill] = useState<NewAppointmentPrefillData | null>(null);
-  
+
   const [isQuickCheckoutOpen, setIsQuickCheckoutOpen] = useState<boolean>(false);
   const [selectedAppointmentForCheckout, setSelectedAppointmentForCheckout] = useState<Appointment | null>(null);
 
@@ -179,6 +183,15 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const openCancelAppointment = (apt: Appointment) => {
     setSelectedAppointmentForCancel(apt);
     setIsCancelAppointmentOpen(true);
+  };
+
+  const openPatientProfile = (patientOrId: Patient | string) => {
+    if (typeof patientOrId === 'string') {
+      const found = patients.find(p => p.id === patientOrId);
+      if (found) setSelectedPatient(found);
+    } else {
+      setSelectedPatient(patientOrId);
+    }
   };
 
   const checkAppointmentConflict = (date: string, timeSlot: string, doctorId: string, excludeApptId?: string): boolean => {
@@ -456,6 +469,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setActiveView,
         remindersTab,
         setRemindersTab,
+        appointmentsTab,
+        setAppointmentsTab,
         userRole,
         setUserRole,
 
@@ -504,6 +519,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setIsCancelAppointmentOpen,
         selectedAppointmentForCancel,
         openCancelAppointment,
+
+        openPatientProfile,
 
         addAppointment,
         cancelAppointment,

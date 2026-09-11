@@ -19,7 +19,8 @@ export const RemindersHubView: React.FC = () => {
     setRemindersTab,
     openPaymentCollection, 
     openQuickCheckout,
-    openFollowUpModal
+    openFollowUpModal,
+    openPatientProfile
   } = useClinic();
 
   const activeTab = remindersTab;
@@ -175,7 +176,14 @@ export const RemindersHubView: React.FC = () => {
                     <tr key={apt.id} className="hover:bg-slate-50/80">
                       <td className="py-3.5 px-4 font-bold text-slate-900 dir-ltr text-right">{toFarsiDigits(apt.timeSlot)}</td>
                       <td className="py-3.5 px-4 font-bold text-indigo-600">{toFarsiDigits(apt.fileNumber)}</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-800">{apt.patientName}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-800">
+                        <button
+                          onClick={() => openPatientProfile(apt.patientId)}
+                          className="hover:text-indigo-600 hover:underline text-right font-bold transition-colors"
+                        >
+                          {apt.patientName}
+                        </button>
+                      </td>
                       <td className="py-3.5 px-4">{toFarsiDigits(apt.patientMobile)}</td>
                       <td className="py-3.5 px-4">{apt.doctorName} ({apt.cabinetNumber || 'اتاق ۱'})</td>
                       <td className="py-3.5 px-4">
@@ -218,7 +226,14 @@ export const RemindersHubView: React.FC = () => {
                   .map(pat => (
                     <tr key={pat.id} className="hover:bg-rose-50/40">
                       <td className="py-3.5 px-4 font-bold text-indigo-600">{toFarsiDigits(pat.fileNumber)}</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{pat.name}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        <button
+                          onClick={() => openPatientProfile(pat)}
+                          className="hover:text-indigo-600 hover:underline text-right font-bold transition-colors"
+                        >
+                          {pat.name}
+                        </button>
+                      </td>
                       <td className="py-3.5 px-4 font-bold text-slate-800">{toFarsiDigits(pat.mobile)}</td>
                       <td className="py-3.5 px-4 font-semibold">
                         {pat.primaryPractice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'}
@@ -261,7 +276,14 @@ export const RemindersHubView: React.FC = () => {
                   .map(apt => (
                     <tr key={apt.id} className="hover:bg-amber-50/40">
                       <td className="py-3.5 px-4 text-amber-900 font-bold">{apt.date}</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{apt.patientName}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        <button
+                          onClick={() => openPatientProfile(apt.patientId)}
+                          className="hover:text-indigo-600 hover:underline text-right font-bold transition-colors"
+                        >
+                          {apt.patientName}
+                        </button>
+                      </td>
                       <td className="py-3.5 px-4">{apt.doctorName}</td>
                       <td className="py-3.5 px-4 font-semibold text-slate-800">{apt.serviceName || 'خدمت تخصصی'}</td>
                       <td className="py-3.5 px-4 text-amber-800">{apt.notes || 'فراموشی منشی در ثبت دریافتی'}</td>
@@ -301,7 +323,14 @@ export const RemindersHubView: React.FC = () => {
                   .map(task => (
                     <tr key={task.id} className="hover:bg-slate-50/80">
                       <td className="py-3.5 px-4 font-bold text-slate-800">{task.dueDate}</td>
-                      <td className="py-3.5 px-4 font-bold text-slate-900">{task.patientName}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        <button
+                          onClick={() => openPatientProfile(task.patientId)}
+                          className="hover:text-indigo-600 hover:underline text-right font-bold transition-colors"
+                        >
+                          {task.patientName}
+                        </button>
+                      </td>
                       <td className="py-3.5 px-4 font-bold text-slate-700">{toFarsiDigits(task.patientMobile)}</td>
                       <td className="py-3.5 px-4">
                         {task.type === 'debt_reminder' && <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold text-[10px]">یادآوری قسط</span>}

@@ -20,7 +20,7 @@ export const ExpensesLogTab: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      
+
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
         <div>

@@ -6,7 +6,8 @@ import {
   TrendingDown, 
   CreditCard, 
   History, 
-  ShieldCheck 
+  ShieldCheck,
+  Eye 
 } from 'lucide-react';
 import { ExpensesLogTab } from './ExpensesLogTab';
 
@@ -18,6 +19,7 @@ export const FinanceView: React.FC = () => {
     expenses, 
     patients, 
     openPaymentCollection, 
+    openPatientProfile,
     setIsQuickCheckoutOpen
   } = useClinic();
 
@@ -183,7 +185,13 @@ export const FinanceView: React.FC = () => {
                 {filteredTransactions.map((trx) => (
                   <tr key={trx.id} className="hover:bg-slate-50">
                     <td className="py-3.5 px-4 font-bold text-slate-800">{trx.date}</td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">{trx.patientName}</td>
+                    <td 
+                      className="py-3.5 px-4 font-bold text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer transition-colors" 
+                      onClick={() => openPatientProfile(trx.patientId)}
+                      title="مشاهده پرونده بیمار"
+                    >
+                      {trx.patientName}
+                    </td>
                     <td className="py-3.5 px-4 font-bold text-indigo-600">{toFarsiDigits(trx.fileNumber)}</td>
                     <td className="py-3.5 px-4 font-semibold text-slate-800">{trx.serviceName}</td>
                     <td className="py-3.5 px-4">
@@ -220,14 +228,20 @@ export const FinanceView: React.FC = () => {
                   <th className="py-3 px-4">موبایل</th>
                   <th className="py-3 px-4">مطب مربوطه</th>
                   <th className="py-3 px-4 text-rose-600">مانده کل بدهی</th>
-                  <th className="py-3 px-4 text-center">ثبت وصولی قسط</th>
+                  <th className="py-3 px-4 text-center">عملیات پرونده / تسویه</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {debtorsList.map((pat) => (
                   <tr key={pat.id} className="hover:bg-rose-50/40">
                     <td className="py-3.5 px-4 font-bold text-indigo-600">{toFarsiDigits(pat.fileNumber)}</td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">{pat.name}</td>
+                    <td 
+                      className="py-3.5 px-4 font-bold text-slate-900 hover:text-indigo-600 hover:underline cursor-pointer transition-colors"
+                      onClick={() => openPatientProfile(pat)}
+                      title="مشاهده پرونده بیمار"
+                    >
+                      {pat.name}
+                    </td>
                     <td className="py-3.5 px-4 font-bold text-slate-800">{toFarsiDigits(pat.mobile)}</td>
                     <td className="py-3.5 px-4 font-semibold">
                       {pat.primaryPractice === 'aesthetic' ? 'زیبایی' : 'دندانپزشکی'}
@@ -236,12 +250,22 @@ export const FinanceView: React.FC = () => {
                       {formatCurrency(Math.abs(pat.balance))}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => openPaymentCollection(pat)}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs"
-                      >
-                        + ثبت دریافت وجه / وصولی قسط
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => openPatientProfile(pat)}
+                          className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                          title="مشاهده پرونده بیمار"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>پرونده</span>
+                        </button>
+                        <button
+                          onClick={() => openPaymentCollection(pat)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs transition-colors cursor-pointer"
+                        >
+                          + ثبت دریافت وجه / وصولی قسط
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
