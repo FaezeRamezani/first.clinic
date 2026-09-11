@@ -3,6 +3,7 @@ import { useClinic } from '../../context/ClinicContext';
 import { X, UserPlus, Search, UserCheck, Calendar, Check, Stethoscope, Sparkles, RefreshCw } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
+import { SearchableServiceSelect } from '../common/SearchableServiceSelect';
 import { getTodayJalaliDate, toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
 import type { Patient } from '../../types';
 
@@ -11,6 +12,7 @@ export const NewAppointmentModal: React.FC = () => {
     isNewAppointmentOpen, 
     setIsNewAppointmentOpen,
     newAppointmentPrefill,
+    setNewAppointmentPrefill,
     patients, 
     doctors, 
     services, 
@@ -46,14 +48,16 @@ export const NewAppointmentModal: React.FC = () => {
   // Is this a rescheduling flow for an existing appointment? (Fixed Doctor, Commit on final confirmation)
   const isRescheduleMode = !!newAppointmentPrefill?.previousAppointmentId;
 
+  const handleClose = () => {
+    setIsNewAppointmentOpen(false);
+    setNewAppointmentPrefill(null);
+  };
+
   useEffect(() => {
     if (isNewAppointmentOpen) {
       // 1. Check prefill patient first
       if (newAppointmentPrefill?.patient) {
         setChosenPatient(newAppointmentPrefill.patient);
-        setStep('details');
-      } else if (selectedPatient) {
-        setChosenPatient(selectedPatient);
         setStep('details');
       } else {
         setChosenPatient(null);
@@ -74,7 +78,7 @@ export const NewAppointmentModal: React.FC = () => {
       setConflictError('');
       setPatientTypeChoice('existing');
     }
-  }, [isNewAppointmentOpen, newAppointmentPrefill, selectedPatient, doctors]);
+  }, [isNewAppointmentOpen, newAppointmentPrefill, doctors]);
 
   if (!isNewAppointmentOpen) return null;
 
@@ -182,7 +186,7 @@ export const NewAppointmentModal: React.FC = () => {
       cabinetNumber: doc.practice === 'aesthetic' ? 'اتاق پوست ۱' : 'یونیت دندانپزشکی ۱'
     });
 
-    setIsNewAppointmentOpen(false);
+    handleClose();
   };
 
   return (
@@ -201,7 +205,7 @@ export const NewAppointmentModal: React.FC = () => {
               {isRescheduleMode ? 'تغییر نوبت (تعیین زمان جدید)' : 'ثبت نوبت جدید در تقویم'}
             </h3>
           </div>
-          <button onClick={() => setIsNewAppointmentOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -406,27 +410,13 @@ export const NewAppointmentModal: React.FC = () => {
             {/* SECTION 4: SERVICE SELECTION (Bound to Doctor/Practice & Disabled if no doctor) */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">خدمت درخواستی (وابسته به پزشک):</label>
-              <select
+              <SearchableServiceSelect
+                services={availableServices}
+                selectedServiceId={serviceId}
+                onChange={(srvId) => setServiceId(srvId)}
+                placeholder={!doctorId ? 'ابتدا پزشک را انتخاب کنید' : 'جستجوی خدمت...'}
                 disabled={!doctorId}
-                value={serviceId}
-                onChange={(e) => setServiceId(e.target.value)}
-                className={`w-full border rounded-xl px-3 py-2 text-xs font-semibold outline-none transition-all ${
-                  !doctorId
-                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                    : 'bg-slate-50 border-slate-300 text-slate-800 focus:border-indigo-500'
-                }`}
-              >
-                {!doctorId ? (
-                  <option value="">ابتدا پزشک را انتخاب کنید</option>
-                ) : (
-                  <>
-                    <option value="">ویزیت / مشاوره عمومی</option>
-                    {availableServices.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.price.toLocaleString('fa-IR')} تومان)</option>
-                    ))}
-                  </>
-                )}
-              </select>
+              />
               {!doctorId && (
                 <p className="text-[11px] text-amber-700 font-medium mt-1">⚠️ ابتدا پزشک را انتخاب کنید تا خدمات مرتبط نمایش داده شوند.</p>
               )}
@@ -480,7 +470,7 @@ export const NewAppointmentModal: React.FC = () => {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setIsNewAppointmentOpen(false)}
+                onClick={handleClose}
                 className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer hover:bg-slate-200 transition-colors"
               >
                 انصراف

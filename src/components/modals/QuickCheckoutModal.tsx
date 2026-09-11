@@ -40,6 +40,7 @@ export const QuickCheckoutModal: React.FC = () => {
   const [nextVisitDate, setNextVisitDate] = useState<string>(getJalaliDateOffset(getTodayJalaliDate(), 14));
   const [nextVisitTimeSlot, setNextVisitTimeSlot] = useState<string>('۱۰:۰۰');
   const [nextVisitDoctorId, setNextVisitDoctorId] = useState<string>('');
+  const [nextVisitServiceId, setNextVisitServiceId] = useState<string>('');
   const [nextVisitError, setNextVisitError] = useState<string>('');
 
   useEffect(() => {
@@ -69,6 +70,7 @@ export const QuickCheckoutModal: React.FC = () => {
       setNextVisitDate(getJalaliDateOffset(getTodayJalaliDate(), 14));
       setNextVisitTimeSlot('۱۰:۰۰');
       setNextVisitDoctorId(apt.doctorId);
+      setNextVisitServiceId('');
       setNextVisitError('');
     }
   }, [isQuickCheckoutOpen, apt, services, doctors]);
@@ -89,15 +91,17 @@ export const QuickCheckoutModal: React.FC = () => {
     }
   };
 
-  const handleNextVisitChange = (newDate: string, newSlot: string, newDocId: string) => {
+  const handleNextVisitChange = (newDate: string, newSlot: string, srvId?: string) => {
     setNextVisitDate(newDate);
     setNextVisitTimeSlot(newSlot);
-    setNextVisitDoctorId(newDocId);
+    if (srvId !== undefined) {
+      setNextVisitServiceId(srvId);
+    }
 
     if (isFollowUpVisitEnabled) {
-      const isConflict = checkAppointmentConflict(newDate, newSlot, newDocId);
+      const isConflict = checkAppointmentConflict(newDate, newSlot, apt?.doctorId || nextVisitDoctorId);
       if (isConflict) {
-        setNextVisitError(`⚠️ زمان ${newSlot} در تاریخ ${newDate} برای پزشک انتخابی پر است.`);
+        setNextVisitError(`⚠️ زمان ${newSlot} در تاریخ ${newDate} برای پزشک معالج پر است.`);
       } else {
         setNextVisitError('');
       }
@@ -139,7 +143,8 @@ export const QuickCheckoutModal: React.FC = () => {
 
     // Handle Follow-up Next Visit Appointment creation if requested
     if (isFollowUpVisitEnabled && !nextVisitError) {
-      const docObj = doctors.find(d => d.id === nextVisitDoctorId) || doctors[0];
+      const docObj = doctors.find(d => d.id === apt.doctorId) || currentDoctor || doctors[0];
+      const nextSrv = validServices.find(s => s.id === nextVisitServiceId);
       addAppointment({
         patientId: apt.patientId,
         patientName: apt.patientName,
@@ -150,8 +155,10 @@ export const QuickCheckoutModal: React.FC = () => {
         practice: docObj.practice,
         date: nextVisitDate,
         timeSlot: nextVisitTimeSlot,
-        duration: 30,
+        duration: nextSrv ? nextSrv.duration : 30,
         status: 'pending',
+        serviceId: nextSrv?.id,
+        serviceName: nextSrv?.name,
         notes: `نوبت ویزیت مجدد رزرو شده در زمان تسویه (قبلی: ${apt.date})`,
         cabinetNumber: docObj.practice === 'aesthetic' ? 'اتاق پوست ۱' : 'یونیت دندانپزشکی ۱'
       });
@@ -286,7 +293,7 @@ export const QuickCheckoutModal: React.FC = () => {
                 checked={isFollowUpVisitEnabled}
                 onChange={(e) => {
                   setIsFollowUpVisitEnabled(e.target.checked);
-                  if (e.target.checked) handleNextVisitChange(nextVisitDate, nextVisitTimeSlot, nextVisitDoctorId);
+                  if (e.target.checked) handleNextVisitChange(nextVisitDate, nextVisitTimeSlot);
                 }}
                 className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
               />
@@ -301,28 +308,25 @@ export const QuickCheckoutModal: React.FC = () => {
                     label="تاریخ ویزیت بعدی:"
                     value={nextVisitDate}
                     minDate={getTodayJalaliDate()}
-                    onChange={(d) => handleNextVisitChange(d || getTodayJalaliDate(), nextVisitTimeSlot, nextVisitDoctorId)}
+                    onChange={(d) => handleNextVisitChange(d || getTodayJalaliDate(), nextVisitTimeSlot)}
                   />
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1 text-[11px]">پزشک نوبت بعدی:</label>
-                    <select
-                      value={nextVisitDoctorId}
-                      onChange={(e) => handleNextVisitChange(nextVisitDate, nextVisitTimeSlot, e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
-                    >
-                      {doctors.map(d => (
-                        <option key={d.id} value={d.id}>{d.name} ({d.specialty})</option>
-                      ))}
-                    </select>
+                    <label className="block font-bold text-slate-700 mb-1 text-[11px]">انتخاب خدمت نوبت بعدی:</label>
+                    <SearchableServiceSelect
+                      services={validServices}
+                      selectedServiceId={nextVisitServiceId}
+                      onChange={(srvId) => handleNextVisitChange(nextVisitDate, nextVisitTimeSlot, srvId)}
+                      placeholder="جستجوی خدمت نوبت بعدی..."
+                    />
                   </div>
 
                   <TimeSlotPicker
                     label="ساعت ویزیت بعدی:"
                     value={nextVisitTimeSlot}
-                    onChange={(slot) => handleNextVisitChange(nextVisitDate, slot, nextVisitDoctorId)}
+                    onChange={(slot) => handleNextVisitChange(nextVisitDate, slot)}
                     date={nextVisitDate}
-                    doctorId={nextVisitDoctorId}
+                    doctorId={apt.doctorId}
                     appointments={appointments}
                   />
                 </div>

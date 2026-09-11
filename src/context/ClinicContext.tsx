@@ -67,6 +67,7 @@ interface ClinicContextType {
   isNewAppointmentOpen: boolean;
   setIsNewAppointmentOpen: (open: boolean) => void;
   newAppointmentPrefill: NewAppointmentPrefillData | null;
+  setNewAppointmentPrefill: (prefill: NewAppointmentPrefillData | null) => void;
   openNewAppointment: (prefill?: NewAppointmentPrefillData) => void;
 
   isQuickCheckoutOpen: boolean;
@@ -492,6 +493,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isNewAppointmentOpen,
         setIsNewAppointmentOpen,
         newAppointmentPrefill,
+        setNewAppointmentPrefill,
         openNewAppointment,
 
         isQuickCheckoutOpen,

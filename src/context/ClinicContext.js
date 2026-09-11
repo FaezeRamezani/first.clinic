@@ -334,6 +334,7 @@ export const ClinicProvider = ({ children }) => {
             isNewAppointmentOpen,
             setIsNewAppointmentOpen,
             newAppointmentPrefill,
+            setNewAppointmentPrefill,
             openNewAppointment,
             isQuickCheckoutOpen,
             setIsQuickCheckoutOpen,

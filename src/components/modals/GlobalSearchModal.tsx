@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useClinic } from '../../context/ClinicContext';
 import { toFarsiDigits, formatCurrency } from '../../utils/persianUtils';
 import { Search, X } from 'lucide-react';
@@ -7,11 +7,21 @@ export const GlobalSearchModal: React.FC = () => {
   const { isGlobalSearchOpen, setIsGlobalSearchOpen, patients, setSelectedPatient } = useClinic();
   const [query, setQuery] = useState<string>('');
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isGlobalSearchOpen) {
       setQuery('');
     }
   }, [isGlobalSearchOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isGlobalSearchOpen) {
+        setIsGlobalSearchOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isGlobalSearchOpen, setIsGlobalSearchOpen]);
 
   if (!isGlobalSearchOpen) return null;
 
@@ -26,7 +36,14 @@ export const GlobalSearchModal: React.FC = () => {
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center pt-16 p-4">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          setIsGlobalSearchOpen(false);
+        }
+      }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center pt-16 p-4"
+    >
       <div className="bg-white rounded-3xl max-w-xl w-full p-4 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
         
         {/* Search Bar Input */}

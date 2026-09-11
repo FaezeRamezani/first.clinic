@@ -24,7 +24,7 @@ export const Sidebar: React.FC = () => {
     onlineRequests,
     followUps,
     appointments,
-    setIsNewAppointmentOpen
+    openNewAppointment
   } = useClinic();
 
   // Calculate badge counts
@@ -149,7 +149,7 @@ export const Sidebar: React.FC = () => {
           </div>
           <div className="grid gap-1.5">
             <button
-              onClick={() => setIsNewAppointmentOpen(true)}
+              onClick={() => openNewAppointment()}
               className="flex items-center justify-center gap-1.5 px-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg text-[11px] font-bold shadow-2xs transition-colors cursor-pointer"
             >
               <Calendar className="w-3.5 h-3.5" />
