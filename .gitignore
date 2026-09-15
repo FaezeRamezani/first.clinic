@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment
+backend/.env
+
+# SQLite runtime database
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+
+# Local database backups
+backend/backups/*
+
+# Generated JavaScript duplicates
+src/data/mockData.js
+src/types/index.js
+src/utils/persianUtils.js
+
