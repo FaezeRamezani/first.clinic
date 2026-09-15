@@ -2,28 +2,41 @@ import moment from 'jalali-moment';
 
 const farsiDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
 
-export function toFarsiDigits(num: number | string): string {
+export function toFarsiDigits(num: number | string | null | undefined): string {
   if (num === null || num === undefined) return '';
   const str = num.toString();
   return str.replace(/\d/g, (x) => farsiDigits[parseInt(x, 10)]);
 }
 
-export function toEnglishDigits(str: string | number): string {
+export function toEnglishDigits(str: string | number | null | undefined): string {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[۰-۹]/g, (w) => (w.charCodeAt(0) - 1776).toString());
 }
 
-export function formatCurrency(amount: number, unit: string = 'تومان'): string {
-  if (isNaN(amount)) return `۰ ${unit}`;
-  const formatted = Math.abs(amount)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  const farsiFormatted = toFarsiDigits(formatted);
-  
-  if (amount < 0) {
-    return `${farsiFormatted}- ${unit}`;
-  }
-  return `${farsiFormatted} ${unit}`;
+export function parseMoneyValue(input: string | number | null | undefined): number {
+  if (input === null || input === undefined || input === '') return 0;
+  if (typeof input === 'number') return isNaN(input) ? 0 : input;
+  const engStr = toEnglishDigits(input.toString());
+  const cleanStr = engStr.replace(/[^0-9-]/g, '');
+  const parsed = parseInt(cleanStr, 10);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+export function formatMoneyNumber(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined || amount === '') return '';
+  const num = typeof amount === 'number' ? amount : parseMoneyValue(amount);
+  if (isNaN(num)) return '';
+  const formattedEng = Math.abs(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '٬');
+  const farsiFormatted = toFarsiDigits(formattedEng);
+  return num < 0 ? `${farsiFormatted}-` : farsiFormatted;
+}
+
+export function formatCurrency(amount: number | string | null | undefined, unit: string = 'تومان'): string {
+  if (amount === null || amount === undefined || amount === '') return `۰ ${unit}`;
+  const num = typeof amount === 'number' ? amount : parseMoneyValue(amount);
+  if (isNaN(num)) return `۰ ${unit}`;
+  const formatted = formatMoneyNumber(num);
+  return `${formatted} ${unit}`;
 }
 
 export function getTodayJalaliDate(): string {
@@ -37,6 +50,23 @@ export function getTodayJalaliString(): string {
 export function normalizeJalaliDate(dateStr: string): string {
   if (!dateStr) return '';
   const eng = toEnglishDigits(dateStr).trim().replace(/\//g, '-');
+  return toFarsiDigits(eng);
+}
+
+export function formatJalaliDateDisplay(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const eng = toEnglishDigits(dateStr).trim().replace(/-/g, '/');
+  const parts = eng.split('/');
+  if (parts.length === 3) {
+    let [year, month, day] = parts;
+    if (year.length <= 2 && day.length === 4) {
+      const temp = year;
+      year = day;
+      day = temp;
+    }
+    const formatted = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
+    return toFarsiDigits(formatted);
+  }
   return toFarsiDigits(eng);
 }
 
@@ -102,4 +132,13 @@ export function getJalaliDaysOfWeek(): { day: string; date: string }[] {
   }
   return days;
 }
+
+export function getJalaliDayOfWeekName(dateStr: string): 'شنبه' | 'یکشنبه' | 'دوشنبه' | 'سه‌شنبه' | 'چهارشنبه' | 'پنج‌شنبه' | 'جمعه' {
+  if (!dateStr) return 'شنبه';
+  const eng = toEnglishDigits(dateStr).trim().replace(/\//g, '-');
+  const m = moment(eng, 'jYYYY-jMM-jDD').locale('fa');
+  if (!m.isValid()) return 'شنبه';
+  return m.format('dddd') as any;
+}
+
 

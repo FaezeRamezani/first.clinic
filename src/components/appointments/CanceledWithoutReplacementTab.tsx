@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Stethoscope, CalendarPlus, Filter, Search, CalendarX, ArrowUpDown } from 'lucide-react';
-import { useClinic } from '../../context/ClinicContext';
-import { toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
+import { useClinic, getPatientFileNumberDisplay } from '../../context/ClinicContext';
+import { toFarsiDigits, toEnglishDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
 
 export const CanceledWithoutReplacementTab: React.FC = () => {
   const { appointments, scope, openNewAppointment, patients } = useClinic();
@@ -163,7 +163,10 @@ export const CanceledWithoutReplacementTab: React.FC = () => {
                         {toFarsiDigits(apt.patientMobile)}
                       </td>
                       <td className="py-3 px-3 font-bold text-indigo-600 dir-ltr text-right">
-                        {toFarsiDigits(apt.fileNumber)}
+                        {(() => {
+                          const p = patients.find(pat => pat.id === apt.patientId);
+                          return p ? getPatientFileNumberDisplay(p, apt.practice) : toFarsiDigits(apt.fileNumber);
+                        })()}
                       </td>
                       <td className="py-3 px-3 text-slate-800 font-medium">
                         {apt.doctorName}
@@ -182,10 +185,10 @@ export const CanceledWithoutReplacementTab: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-3 text-slate-700 dir-ltr text-right font-semibold">
-                        {toFarsiDigits(apt.date)} - {toFarsiDigits(apt.timeSlot)}
+                        {formatJalaliDateDisplay(apt.date)} - {toFarsiDigits(apt.timeSlot)}
                       </td>
                       <td className="py-3 px-3 text-rose-700 font-bold dir-ltr text-right">
-                        {toFarsiDigits(apt.canceledAt || apt.date)}
+                        {formatJalaliDateDisplay(apt.canceledAt || apt.date)}
                       </td>
                       <td className="py-3 px-3 text-slate-600 max-w-[160px] truncate" title={apt.cancellationReason}>
                         {apt.cancellationReason || 'لغو توسط منشی'}

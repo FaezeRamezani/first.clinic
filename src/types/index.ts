@@ -10,6 +10,24 @@ export type FollowUpStatus = 'pending' | 'called_no_answer' | 'called_confirmed'
 
 export type PresenceStatus = 'present' | 'absent' | 'pending';
 
+export interface ShiftHoursConfig {
+  startTime: string; // e.g. "09:00"
+  endTime: string;   // e.g. "14:00"
+}
+
+export interface GlobalShiftsConfig {
+  morning: ShiftHoursConfig;
+  evening: ShiftHoursConfig;
+}
+
+export type DayOfWeekPersian = 'شنبه' | 'یکشنبه' | 'دوشنبه' | 'سه‌شنبه' | 'چهارشنبه' | 'پنج‌شنبه' | 'جمعه';
+
+export interface DoctorDaySchedule {
+  day: DayOfWeekPersian;
+  morningActive: boolean;
+  eveningActive: boolean;
+}
+
 export interface Doctor {
   id: string;
   name: string;
@@ -19,6 +37,13 @@ export interface Doctor {
   avatar: string;
   workingHours: string;
   color: string;
+  weeklySchedule?: DoctorDaySchedule[];
+}
+
+export interface PaymentAccount {
+  id: string;
+  name: string;
+  practice: 'aesthetic' | 'dental';
 }
 
 export interface ServiceItem {
@@ -29,27 +54,42 @@ export interface ServiceItem {
   price: number; // In Tomans
   duration: number; // minutes
   description?: string;
+  defaultPaymentTermDays?: number;
   active: boolean;
+}
+
+export type PracticeType = 'aesthetic' | 'dental';
+
+export interface PracticeMembership {
+  practice: PracticeType;
+  physicalFileNumber: string;
+  joinedAt?: string;
 }
 
 export interface Patient {
   id: string;
-  fileNumber: string; // e.g. CL-1001
-  nationalId: string;
+  fileNumber?: string; // legacy/fallback display string
+  nationalId?: string;
   name: string;
   mobile: string;
-  gender: 'female' | 'male';
+  gender?: 'female' | 'male';
   birthDate?: string;
-  primaryPractice: 'aesthetic' | 'dental';
-  allergies: string[];
-  medicalNotes: string;
-  emergencyContact: {
-    name: string;
-    phone: string;
-    relation: string;
+  primaryPractice?: PracticeType; // legacy display indicator
+  memberships: PracticeMembership[]; // source of truth for practice membership and file numbers
+  allergies?: string[];
+  medicalNotes?: string;
+  emergencyContact?: {
+    name?: string;
+    phone?: string;
+    relation?: string;
   };
   balance: number; // positive = prepayment (بستانکار), negative = debt (بدهکار), 0 = settled
   createdAt: string;
+  profileStatus?: 'incomplete' | 'completed';
+  loginCredentials?: {
+    username: string;
+    password?: string;
+  };
 }
 
 export interface Appointment {
@@ -105,7 +145,8 @@ export interface FinancialTransaction {
   fileNumber: string;
   appointmentId?: string;
   practice: 'aesthetic' | 'dental';
-  date: string; // Jalali YYYY-MM-DD
+  date: string; // Jalali YYYY-MM-DD (recordDate)
+  serviceDate?: string; // Jalali YYYY-MM-DD (serviceDate - date treatment rendered)
   timestamp?: string; // Time e.g. ۱۴:۳۰
   serviceName: string;
   totalCost: number; // Tomans
@@ -115,9 +156,12 @@ export interface FinancialTransaction {
   remainingDebt: number;
   paymentMethod: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer';
   posAccount: string; // Bank account label
-  debtDueDate?: string; // Jalali YYYY-MM-DD if remainingDebt > 0
+  debtDueDate?: string; // Jalali YYYY-MM-DD (dueDate) if remainingDebt > 0
+  lastActionDate?: string; // Jalali YYYY-MM-DD of last debt review/payment
   isRetroactive?: boolean;
   notes?: string;
+  trxType?: 'service' | 'payment';
+  obligationId?: string;
 }
 
 export interface FollowUpTask {

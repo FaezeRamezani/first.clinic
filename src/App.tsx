@@ -3,7 +3,7 @@ import { ClinicProvider, useClinic } from './context/ClinicContext';
 import { TopBar } from './components/layout/TopBar';
 import { Sidebar } from './components/layout/Sidebar';
 import { DashboardView } from './components/dashboard/DashboardView';
-import { AppointmentsView } from './components/appointments/AppointmentsView';
+import { AppointmentsView } from './components/appointments/AppointmentsView.tsx';
 import { RemindersHubView } from './components/reminders/RemindersHubView';
 import { PatientDirectoryView } from './components/patients/PatientDirectoryView';
 import { FinanceView } from './components/finance/FinanceView';
@@ -21,8 +21,16 @@ import { CancelAppointmentModal } from './components/modals/CancelAppointmentMod
 
 import { PatientDetailModal } from './components/patients/PatientDetailModal';
 
+import { IncompletePatientCredentialsModal } from './components/modals/IncompletePatientCredentialsModal';
+
 const MainContent: React.FC = () => {
-  const { activeView, selectedPatient, setSelectedPatient } = useClinic();
+  const { 
+    activeView, 
+    selectedPatient, 
+    setSelectedPatient,
+    createdIncompletePatientModal,
+    setCreatedIncompletePatientModal
+  } = useClinic();
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -60,6 +68,22 @@ const MainContent: React.FC = () => {
         </main>
       </div>
 
+      {/* Shared Global Patient Profile Detail Modal */}
+      {selectedPatient && (
+        <PatientDetailModal
+          patient={selectedPatient}
+          onClose={() => setSelectedPatient(null)}
+        />
+      )}
+
+      {/* Incomplete Patient Credentials Modal */}
+      {createdIncompletePatientModal && (
+        <IncompletePatientCredentialsModal
+          patient={createdIncompletePatientModal}
+          onClose={() => setCreatedIncompletePatientModal(null)}
+        />
+      )}
+
       {/* Global Interactive Modals */}
       <GlobalSearchModal />
       <NewAppointmentModal />
@@ -69,14 +93,6 @@ const MainContent: React.FC = () => {
       <NewPatientModal />
       <NewExpenseModal />
       <CancelAppointmentModal />
-
-      {/* Shared Global Patient Profile Detail Modal */}
-      {selectedPatient && (
-        <PatientDetailModal
-          patient={selectedPatient}
-          onClose={() => setSelectedPatient(null)}
-        />
-      )}
     </div>
   );
 };

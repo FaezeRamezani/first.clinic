@@ -1,8 +1,5 @@
 import React from 'react';
 import {
-  Users,
-  AlertCircle,
-  HelpCircle,
   Globe,
   CheckCircle2,
   Sparkles,
@@ -10,14 +7,12 @@ import {
   Receipt,
   UserCheck,
   CreditCard,
-  PhoneCall,
-  ArrowRight,
   CalendarX,
-  AlertTriangle,
-  XCircle
+  XCircle,
+  Users
 } from 'lucide-react';
-import { useClinic } from '../../context/ClinicContext';
-import { formatCurrency, toFarsiDigits, getTodayJalaliDate, toEnglishDigits, isPastUnfinalizedAppointment } from '../../utils/persianUtils';
+import { useClinic, hasPracticeMembership, getPatientFileNumberDisplay } from '../../context/ClinicContext';
+import { formatCurrency, toFarsiDigits, getTodayJalaliDate, toEnglishDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
 import type { PresenceStatus, Appointment } from '../../types';
 
 export const DashboardView: React.FC = () => {
@@ -26,49 +21,92 @@ export const DashboardView: React.FC = () => {
     appointments,
     patients,
     onlineRequests,
-    followUps,
+    transactions,
     updateAppointmentPresenceStatus,
     openQuickCheckout,
     openPaymentCollection,
     openCancelAppointment,
     openPatientProfile,
     setActiveView,
-    setRemindersTab,
-    setAppointmentsTab
+    setAppointmentsTab,
+    dashboardDate
   } = useClinic();
 
   // 1. Filter data by current global practice scope
   const filteredAppointments = appointments.filter(a => scope === 'unified' || a.practice === scope);
-  const filteredPatients = patients.filter(p => scope === 'unified' || p.primaryPractice === scope);
+  const filteredPatients = patients.filter(p => hasPracticeMembership(p, scope));
   const filteredOnlineRequests = onlineRequests.filter(r => scope === 'unified' || r.targetPractice === scope);
-  const filteredFollowUps = followUps.filter(f => scope === 'unified' || f.practice === scope);
 
-  // 2. Operational Summary Metrics & Strict Real System TODAY Filter (Section 13, 15)
+  // 2. Operational Summary Metrics & Strict Date Filter
   const todayJalali = getTodayJalaliDate();
-  const todayAppointments = filteredAppointments.filter(a => {
-    const normAptDate = toEnglishDigits(a.date).trim().replace(/\//g, '-');
-    const normTodayDate = toEnglishDigits(todayJalali).trim().replace(/\//g, '-');
-    return normAptDate === normTodayDate;
+  const selectedDate = dashboardDate || todayJalali;
+  const isToday = selectedDate === todayJalali;
+
+  const normSelectedDate = toEnglishDigits(selectedDate).trim().replace(/\//g, '-');
+
+  const todayAppointments = filteredAppointments
+    .filter(a => {
+      const normAptDate = toEnglishDigits(a.date).trim().replace(/\//g, '-');
+      return normAptDate === normSelectedDate;
+    })
+    .sort((a, b) => {
+      const timeA = toEnglishDigits(a.timeSlot || '').trim();
+      const timeB = toEnglishDigits(b.timeSlot || '').trim();
+      if (timeA !== timeB) {
+        return timeA.localeCompare(timeB, undefined, { numeric: true });
+      }
+      return (a.id || '').localeCompare(b.id || '');
+    });
+
+  const activeTodayAppointments = todayAppointments.filter(a => a.status !== 'canceled' && a.status !== 'rescheduled');
+  const completedCount = activeTodayAppointments.filter(a => a.status === 'completed').length;
+  const nonCompletedActive = activeTodayAppointments.filter(a => a.status !== 'completed');
+
+  const presentCount = nonCompletedActive.filter(a =>
+    a.presenceStatus === 'present' || (a.status === 'checked_in' && a.presenceStatus !== 'absent')
+  ).length;
+
+  const absentCount = nonCompletedActive.length - presentCount;
+
+  // Helper to resolve current active due date and live remaining debt of a Financial Obligation
+  const getObligationActiveDetails = (ob: any, allTrxs: any[]) => {
+    const linkedPayments = allTrxs.filter(t => 
+      t.trxType === 'payment' && 
+      (t.obligationId === ob.id || (ob.appointmentId && t.appointmentId === ob.appointmentId))
+    );
+
+    const totalPaidOnObligation = (ob.paidAmount || 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+    const remainingDebt = Math.max(0, (ob.netCost || 0) - totalPaidOnObligation);
+
+    const latestPayment = linkedPayments[0];
+    const activeDueDate = (latestPayment && latestPayment.debtDueDate) ? latestPayment.debtDueDate : ob.debtDueDate;
+
+    return {
+      ob,
+      linkedPayments,
+      remainingDebt,
+      activeDueDate
+    };
+  };
+
+  // Daily debtors for selectedDate (shows active debts whose current active due date matches selectedDate EXACTLY)
+  const overdueDebtors = filteredPatients.filter(p => {
+    const pObTrxs = transactions.filter(t => t.patientId === p.id && t.trxType !== 'payment');
+    if (pObTrxs.length === 0) return false;
+
+    const activeObsDueSelectedDate = pObTrxs.map(ob => getObligationActiveDetails(ob, transactions)).filter(info => {
+      if (info.remainingDebt <= 0) return false;
+      const normDueDate = info.activeDueDate ? toEnglishDigits(info.activeDueDate).trim().replace(/\//g, '-') : '';
+      return normDueDate === normSelectedDate;
+    });
+
+    return activeObsDueSelectedDate.length > 0;
   });
 
-  const activeAppointments = todayAppointments.filter(a => a.status !== 'completed' && a.status !== 'canceled' && a.status !== 'rescheduled');
-  const checkedInCount = activeAppointments.filter(a => a.presenceStatus ? a.presenceStatus === 'present' : a.status === 'checked_in').length;
-  const absentCount = activeAppointments.length - checkedInCount;
-  const completedCount = todayAppointments.filter(a => a.status === 'completed').length;
 
-  // Overdue debtor patients (only remaining debt > 0 / balance < 0, fully settled excluded)
-  const overdueDebtors = filteredPatients.filter(p => p.balance < 0);
-  const totalOverdueAmount = overdueDebtors.reduce((sum, p) => sum + Math.abs(p.balance), 0);
-
-  // Unsettled / Past Unfinalized Visits (Section 16 & 17)
-  const unfinalizedPastAppointments = filteredAppointments.filter(a => isPastUnfinalizedAppointment(a));
-  const unsettledVisits = filteredAppointments.filter(a => a.status === 'unsettled');
 
   // Pending Online Requests
   const pendingOnlineRequests = filteredOnlineRequests.filter(r => r.status === 'pending');
-
-  // Pending Secretary Tasks
-  const pendingFollowUps = filteredFollowUps.filter(f => f.status === 'pending');
 
   // Presence & Status Renderer for Dashboard Table
   const renderPresenceButton = (apt: Appointment) => {
@@ -113,7 +151,7 @@ export const DashboardView: React.FC = () => {
       );
     }
 
-    const isPresent = apt.presenceStatus ? apt.presenceStatus === 'present' : apt.status === 'checked_in';
+    const isPresent = apt.presenceStatus === 'present' || (apt.status === 'checked_in' && apt.presenceStatus !== 'absent');
 
     const handleTogglePresence = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -152,114 +190,50 @@ export const DashboardView: React.FC = () => {
   return (
     <div className="space-y-5 pb-12">
 
-      {/* Section 16 & 17: Past Unfinalized Appointments Notification Alert Banner */}
-      {unfinalizedPastAppointments.length > 0 && (
+      {/* Operational Summary Cards (Fully Clickable & Interactive) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        {/* Card 1: Today's / Selected Date Appointments */}
         <div
           onClick={() => {
-            setRemindersTab('unsettled_visits');
-            setActiveView('reminders');
+            setAppointmentsTab('schedule');
+            setActiveView('appointments');
           }}
-          className="bg-amber-50 border border-amber-300 p-3.5 rounded-2xl shadow-2xs flex items-center justify-between cursor-pointer hover:bg-amber-100/80 transition-all animate-in fade-in duration-150"
-        >
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <span className="font-extrabold text-amber-950 text-xs sm:text-sm">
-                ⚠️ {toFarsiDigits(unfinalizedPastAppointments.length)} نوبت گذشته هنوز تعیین تکلیف نشده‌اند.
-              </span>
-              <p className="text-[11px] text-amber-800 font-medium mt-0.5">
-                برای بررسی، تسویه یا تعیین تکلیف نهایی این پرونده‌های معوقه کلیک کنید.
-              </p>
-            </div>
-          </div>
-          <span className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-2xs shrink-0 flex items-center gap-1 transition-colors">
-            <span>مشاهده و پیگیری</span>
-            <ArrowRight className="w-3.5 h-3.5 rotate-180" />
-          </span>
-        </div>
-      )}
-
-      {/* Operational Summary Cards (Fully Clickable & Interactive) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-
-        {/* Card 1: Today Appointments */}
-        <div
-          onClick={() => setActiveView('appointments')}
           className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">نوبت‌های امروز</span>
+            <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">
+              {isToday ? 'نوبتهای امروز' : `نوبتهای ${formatJalaliDateDisplay(selectedDate)}`}
+            </span>
+
             <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
               <Users className="w-4 h-4" />
             </div>
           </div>
+
           <div>
             <div className="text-xl font-black text-slate-800">
-              {toFarsiDigits(todayAppointments.length)} <span className="text-xs font-medium text-slate-500">نوبت</span>
+              {toFarsiDigits(activeTodayAppointments.length)}
+              <span className="text-xs font-medium text-slate-500 mr-1">نوبت</span>
             </div>
+
             <div className="flex items-center gap-1 mt-2 text-[10px] font-bold flex-wrap">
               <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded">
-                {toFarsiDigits(checkedInCount)} حاضر
+                {toFarsiDigits(presentCount)} حاضر
               </span>
+
               <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded">
                 {toFarsiDigits(absentCount)} عدم حضور
               </span>
+
               <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
-                {toFarsiDigits(completedCount)} انجام‌شده
+                {toFarsiDigits(completedCount)} انجامشده
               </span>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Overdue Debts */}
-        <div
-          onClick={() => {
-            setRemindersTab('overdue_debts');
-            setActiveView('reminders');
-          }}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-rose-400 hover:shadow-md transition-all group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600 group-hover:text-rose-600 transition-colors">مطالبات سررسیدشده</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-colors">
-              <AlertCircle className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-lg font-black text-rose-600 truncate">
-              {formatCurrency(totalOverdueAmount)}
-            </div>
-            <p className="text-[11px] font-medium text-slate-500 mt-1">
-              {toFarsiDigits(overdueDebtors.length)} بیمار بدهکار معوق
-            </p>
-          </div>
-        </div>
-
-        {/* Card 3: Unsettled Visits */}
-        <div
-          onClick={() => {
-            setRemindersTab('unsettled_visits');
-            setActiveView('reminders');
-          }}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-amber-400 hover:shadow-md transition-all group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600 group-hover:text-amber-600 transition-colors">ویزیت‌های بلاتکلیف</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
-              <HelpCircle className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-black text-amber-600">
-              {toFarsiDigits(unsettledVisits.length)} <span className="text-xs font-medium text-slate-500">پرونده</span>
-            </div>
-            <p className="text-[11px] font-medium text-slate-500 mt-1">
-              خدمات بدون تسویه مالی
-            </p>
-          </div>
-        </div>
-
-        {/* Card 4: Online Requests */}
+        {/* Card 2: Online Requests */}
         <div
           onClick={() => {
             setAppointmentsTab('online_requests');
@@ -283,30 +257,6 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 5: Secretary Tasks */}
-        <div
-          onClick={() => {
-            setRemindersTab('secretary_calls');
-            setActiveView('reminders');
-          }}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-purple-400 hover:shadow-md transition-all group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600 group-hover:text-purple-600 transition-colors">پیگیری‌ها و تماس‌ها</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
-              <PhoneCall className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-black text-purple-600">
-              {toFarsiDigits(pendingFollowUps.length)} <span className="text-xs font-medium text-slate-500">ماموریت</span>
-            </div>
-            <p className="text-[11px] font-medium text-slate-500 mt-1">
-              تماس‌های یادآوری امروز
-            </p>
-          </div>
-        </div>
-
       </div>
 
       {/* Main Operational Tables Grid — Responsive 2 Columns (xl:grid-cols-2 min-w-0) */}
@@ -317,17 +267,23 @@ export const DashboardView: React.FC = () => {
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-800">نوبت‌های امروز</h3>
+                <h3 className="text-sm font-bold text-slate-800">
+                  {isToday ? 'نوبت‌های امروز' : `نوبت‌های ${formatJalaliDateDisplay(selectedDate)}`}
+                </h3>
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded-md text-xs">
                   {toFarsiDigits(todayAppointments.length)} نوبت
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 font-medium">جریان عملیاتی امروز</span>
+              <span className="text-[11px] text-slate-400 font-medium">
+                {isToday ? 'جریان عملیاتی امروز' : `جریان عملیاتی ${formatJalaliDateDisplay(selectedDate)}`}
+              </span>
             </div>
 
             {todayAppointments.length === 0 ? (
               <div className="py-16 text-center text-slate-400 text-xs">
-                هیچ نوبتی برای مطب انتخابی در تاریخ امروز ثبت نشده است.
+                {isToday
+                  ? 'هیچ نوبتی برای مطب انتخابی در تاریخ امروز ثبت نشده است.'
+                  : `هیچ نوبتی برای مطب انتخابی در تاریخ ${formatJalaliDateDisplay(selectedDate)} ثبت نشده است.`}
               </div>
             ) : (
               <div className="overflow-x-auto max-h-[380px] overflow-y-auto rounded-xl border border-slate-100">
@@ -368,7 +324,12 @@ export const DashboardView: React.FC = () => {
                             </p>
                           </td>
                           <td className="py-3 px-3 font-bold text-indigo-700 dir-ltr text-right whitespace-nowrap">
-                            {toFarsiDigits(apt.fileNumber)}
+                            {toFarsiDigits(
+                              (() => {
+                                const p = patients.find(pat => pat.id === apt.patientId);
+                                return p ? getPatientFileNumberDisplay(p, apt.practice) : (apt.fileNumber || '-');
+                              })()
+                            )}
                           </td>
                           <td className="py-3 px-3 whitespace-nowrap">
                             <div className="flex items-center gap-1">
@@ -442,12 +403,16 @@ export const DashboardView: React.FC = () => {
                   {toFarsiDigits(overdueDebtors.length)} پرونده
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 font-medium">اقدام امروز</span>
+              <span className="text-[11px] text-slate-400 font-medium">
+                {isToday ? 'اقدام امروز' : `اقدام ${formatJalaliDateDisplay(selectedDate)}`}
+              </span>
             </div>
 
             {overdueDebtors.length === 0 ? (
               <div className="py-16 text-center text-slate-400 text-xs">
-                هیچ بدهی سررسیدشده یا معوقه‌ای برای مطب انتخابی وجود ندارد.
+                {isToday
+                  ? 'هیچ بدهی سررسیدشده یا معوقه‌ای برای مطب انتخابی وجود ندارد.'
+                  : `هیچ بدهی سررسیدشده‌ای برای مطب انتخابی در تاریخ ${formatJalaliDateDisplay(selectedDate)} ثبت نشده است.`}
               </div>
             ) : (
               <div className="overflow-x-auto max-h-[380px] overflow-y-auto rounded-xl border border-slate-100">
@@ -463,11 +428,24 @@ export const DashboardView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {overdueDebtors.map((patient) => {
-                      const isAesthetic = patient.primaryPractice === 'aesthetic';
-                      // Clear visible warmer practice row tint
+                      const pObTrxs = transactions.filter(t => t.patientId === patient.id && t.trxType !== 'payment');
+                      const activeObsDueSelectedDate = pObTrxs.map(ob => getObligationActiveDetails(ob, transactions)).filter(info => {
+                        if (info.remainingDebt <= 0) return false;
+                        const normDueDate = info.activeDueDate ? toEnglishDigits(info.activeDueDate).trim().replace(/\//g, '-') : '';
+                        return normDueDate === normSelectedDate;
+                      });
+
+                      const allPatientActiveObs = pObTrxs.map(ob => getObligationActiveDetails(ob, transactions)).filter(info => info.remainingDebt > 0);
+                      const liveRemainingDebt = allPatientActiveObs.reduce((sum, info) => sum + info.remainingDebt, 0);
+
+                      const primaryTargetInfo = activeObsDueSelectedDate[0] || (pObTrxs[0] ? getObligationActiveDetails(pObTrxs[0], transactions) : null);
+                      const targetTrx = primaryTargetInfo ? primaryTargetInfo.ob : null;
+                      const targetPractice = targetTrx ? targetTrx.practice : patient.primaryPractice;
+                      const isAesthetic = targetPractice === 'aesthetic';
+
                       const rowClass = isAesthetic
-                        ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950'
-                        : 'bg-teal-100/70 hover:bg-teal-100/90 border-r-4 border-r-teal-600 text-teal-950';
+                        ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950 font-medium'
+                        : 'bg-teal-100/70 hover:bg-teal-100/90 border-r-4 border-r-teal-600 text-teal-950 font-medium';
 
                       return (
                         <tr key={patient.id} className={`${rowClass} transition-colors`}>
@@ -479,56 +457,38 @@ export const DashboardView: React.FC = () => {
                             >
                               {patient.name}
                             </p>
-                            <p className="text-[11px] text-slate-700 font-semibold dir-ltr text-right">
+                            <p className="text-[11px] text-slate-600 font-semibold dir-ltr text-right">
                               {toFarsiDigits(patient.mobile)}
                             </p>
                           </td>
                           <td className="py-3 px-3 font-bold text-indigo-700 dir-ltr text-right whitespace-nowrap">
-                            {toFarsiDigits(patient.fileNumber)}
+                            {toFarsiDigits(getPatientFileNumberDisplay(patient, targetPractice))}
                           </td>
                           <td className="py-3 px-3 whitespace-nowrap">
                             {isAesthetic ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-200/80 text-purple-900 text-[10px] font-bold">
                                 <Sparkles className="w-3 h-3 text-purple-700" />
-                                <span>زیبایی</span>
+                                <span>زیبایی (دکتر رمضانی)</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-200/80 text-teal-900 text-[10px] font-bold">
                                 <Stethoscope className="w-3 h-3 text-teal-700" />
-                                <span>دندانپزشکی</span>
+                                <span>دندانپزشکی (دکتر آخرتی)</span>
                               </span>
                             )}
                           </td>
                           <td className="py-3 px-3 font-black text-rose-700 text-xs whitespace-nowrap">
-                            {formatCurrency(Math.abs(patient.balance))}
+                            {formatCurrency(liveRemainingDebt)}
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
-                              {/*<button
-                                onClick={() => openPatientProfile(patient)}
-                                className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[10px] shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
-                                title="مشاهده پرونده بیمار"
-                              >
-                                <Eye className="w-3 h-3" />
-                                <span>پرونده</span>
-                              </button>*/}
                               <button
-                                onClick={() => openPaymentCollection(patient)}
-                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                                onClick={() => openPaymentCollection(patient, targetTrx || null, targetPractice)}
+                                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
                                 title="ثبت دریافت وجه"
                               >
-                                <CreditCard className="w-3 h-3" />
-                                <span>دریافت وجه</span>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setRemindersTab('secretary_calls');
-                                  setActiveView('reminders');
-                                }}
-                                className="p-1.5 bg-slate-200/80 hover:bg-slate-300 text-slate-800 font-bold rounded-lg text-[10px] transition-colors flex items-center justify-center cursor-pointer"
-                                title="پیگیری تلفنی"
-                              >
-                                <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                                <CreditCard className="w-3.5 h-3.5" />
+                                <span>ثبت پرداخت</span>
                               </button>
                             </div>
                           </td>

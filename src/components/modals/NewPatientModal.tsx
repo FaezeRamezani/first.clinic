@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
+import { getTodayJalaliDate } from '../../utils/persianUtils';
 import { X } from 'lucide-react';
 
 export const NewPatientModal: React.FC = () => {
-  const { isNewPatientOpen, setIsNewPatientOpen, addPatient, patients } = useClinic();
+  const { isNewPatientOpen, setIsNewPatientOpen, addPatient, patients, ensurePatientMembership } = useClinic();
 
   const [name, setName] = useState<string>('');
   const [mobile, setMobile] = useState<string>('');
@@ -37,9 +38,13 @@ export const NewPatientModal: React.FC = () => {
     // Check duplicate warning by mobile / national ID
     const duplicate = patients.find(p => p.mobile === mobile || (nationalId && p.nationalId === nationalId));
     if (duplicate) {
-      if (!confirm(`هشدار: بیمار با این شماره موبایل یا کد ملی قبلاً با نام «${duplicate.name}» (پرونده ${duplicate.fileNumber}) ثبت شده است. آیا مطمئن به ایجاد پرونده مجزا هستید؟`)) {
-        return;
-      }
+      alert(`اطلاعات این شخص قبلاً با نام «${duplicate.name}» در سیستم ثبت شده است. عضویت ${primaryPractice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'} برای همین بیمار فعال گردید.`);
+      ensurePatientMembership(duplicate.id, primaryPractice);
+      setIsNewPatientOpen(false);
+      setName('');
+      setMobile('');
+      setNationalId('');
+      return;
     }
 
     addPatient({
@@ -49,6 +54,7 @@ export const NewPatientModal: React.FC = () => {
       gender,
       birthDate,
       primaryPractice,
+      memberships: [{ practice: primaryPractice, physicalFileNumber: String(100 + patients.length + 1), joinedAt: getTodayJalaliDate() }],
       allergies: allergiesStr ? allergiesStr.split(',').map(s => s.trim()) : [],
       medicalNotes,
       emergencyContact: {
@@ -65,7 +71,7 @@ export const NewPatientModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
         
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">

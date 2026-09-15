@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
 import { X } from 'lucide-react';
+import { MoneyInput } from '../common/MoneyInput';
 
 export const NewExpenseModal: React.FC = () => {
   const { isNewExpenseOpen, setIsNewExpenseOpen, addExpense } = useClinic();
 
   const [title, setTitle] = useState<string>('');
   const [category, setCategory] = useState<'consumables' | 'rent' | 'salaries' | 'equipment' | 'utilities' | 'other'>('consumables');
-  const [amount, setAmount] = useState<string>('');
+  const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState<string>('۱۴۰۵-۰۶-۱۶');
   const [practice, setPractice] = useState<'aesthetic' | 'dental' | 'unified'>('aesthetic');
   const [receiptNumber, setReceiptNumber] = useState<string>('');
@@ -17,7 +18,7 @@ export const NewExpenseModal: React.FC = () => {
     if (isNewExpenseOpen) {
       setTitle('');
       setCategory('consumables');
-      setAmount('');
+      setAmount(0);
       setPractice('aesthetic');
       setReceiptNumber('');
     }
@@ -32,7 +33,7 @@ export const NewExpenseModal: React.FC = () => {
     addExpense({
       title,
       category,
-      amount: parseInt(amount, 10),
+      amount: typeof amount === 'number' ? amount : parseInt(amount, 10),
       date,
       practice,
       recordedBy: 'منشی پذیرش',
@@ -42,11 +43,11 @@ export const NewExpenseModal: React.FC = () => {
 
     setIsNewExpenseOpen(false);
     setTitle('');
-    setAmount('');
+    setAmount(0);
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
         
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -89,13 +90,11 @@ export const NewExpenseModal: React.FC = () => {
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">مبلغ (تومان):</label>
-              <input
-                type="number"
-                required
+              <MoneyInput
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="مثلا: ۵۰۰۰۰۰۰"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-rose-700 outline-none"
+                onChange={(val) => setAmount(val)}
+                unit="تومان"
+                className="text-xs font-bold text-rose-700 bg-slate-50"
               />
             </div>
           </div>

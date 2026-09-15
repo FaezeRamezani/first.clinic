@@ -11,6 +11,7 @@ interface JalaliDatePickerProps {
   className?: string;
   disabled?: boolean;
   minDate?: string; // Jalali date string e.g. "۱۴۰۵-۰۶-۱۶" or "1405-06-16"
+  maxDate?: string; // Jalali date string e.g. "۱۴۰۵-۰۶-۱۶" or "1405-06-16"
 }
 
 const jalaliMonths = [
@@ -27,7 +28,8 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
   placeholder = 'انتخاب تاریخ شمسی',
   className = '',
   disabled = false,
-  minDate
+  minDate,
+  maxDate
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
@@ -43,24 +45,14 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
     }
   }, [isOpen]);
 
-  // Parse initial value to moment object in Jalali locale
-  const getInitialMoment = () => {
-    if (!value) return moment().locale('fa');
-    const eng = toEnglishDigits(value).trim().replace(/\//g, '-');
-    const m = moment(eng, 'jYYYY-jMM-jDD').locale('fa');
-    return m.isValid() ? m : moment().locale('fa');
-  };
+  const [viewMoment, setViewMoment] = useState<moment.Moment>(moment().locale('fa'));
 
-  const [viewMoment, setViewMoment] = useState<moment.Moment>(getInitialMoment());
-
-  // Update view moment if prop value changes and popover is unopened
+  // Reset calendar view to TODAY whenever popover opens so user sees today's month
   useEffect(() => {
-    if (value) {
-      const eng = toEnglishDigits(value).trim().replace(/\//g, '-');
-      const m = moment(eng, 'jYYYY-jMM-jDD').locale('fa');
-      if (m.isValid()) setViewMoment(m);
+    if (isOpen) {
+      setViewMoment(moment().locale('fa'));
     }
-  }, [value]);
+  }, [isOpen]);
 
   // Click outside listener
   useEffect(() => {
@@ -97,6 +89,7 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
   const normalizedSelected = value ? toEnglishDigits(value).trim().replace(/\//g, '-') : '';
   const normalizedToday = moment().locale('fa').format('jYYYY-jMM-jDD');
   const normalizedMinDate = minDate ? toEnglishDigits(minDate).trim().replace(/\//g, '-') : '';
+  const normalizedMaxDate = maxDate ? toEnglishDigits(maxDate).trim().replace(/\//g, '-') : '';
 
   const handleSelectDay = (dayNum: number) => {
     const monthStr = (jMonth + 1).toString().padStart(2, '0');
@@ -104,6 +97,9 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
     const currentIso = `${jYear}-${monthStr}-${dayStr}`;
 
     if (normalizedMinDate && currentIso < normalizedMinDate) {
+      return;
+    }
+    if (normalizedMaxDate && currentIso > normalizedMaxDate) {
       return;
     }
 
@@ -203,7 +199,10 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
 
               const isSelected = normalizedSelected === currentIso;
               const isToday = normalizedToday === currentIso;
-              const isDisabled = Boolean(normalizedMinDate && currentIso < normalizedMinDate);
+              const isDisabled = Boolean(
+                (normalizedMinDate && currentIso < normalizedMinDate) ||
+                (normalizedMaxDate && currentIso > normalizedMaxDate)
+              );
 
               return (
                 <button
@@ -231,16 +230,21 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
           <div className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center text-[10px]">
             <button
               type="button"
-              disabled={Boolean(normalizedMinDate && normalizedToday < normalizedMinDate)}
+              disabled={Boolean(
+                (normalizedMinDate && normalizedToday < normalizedMinDate) ||
+                (normalizedMaxDate && normalizedToday > normalizedMaxDate)
+              )}
               onClick={() => {
                 if (normalizedMinDate && normalizedToday < normalizedMinDate) return;
+                if (normalizedMaxDate && normalizedToday > normalizedMaxDate) return;
                 const todayM = moment().locale('fa');
                 setViewMoment(todayM);
                 onChange(toFarsiDigits(todayM.format('jYYYY-jMM-jDD')));
                 setIsOpen(false);
               }}
               className={`font-bold ${
-                normalizedMinDate && normalizedToday < normalizedMinDate
+                (normalizedMinDate && normalizedToday < normalizedMinDate) ||
+                (normalizedMaxDate && normalizedToday > normalizedMaxDate)
                   ? 'text-slate-300 cursor-not-allowed opacity-50'
                   : 'text-indigo-600 hover:underline cursor-pointer'
               }`}

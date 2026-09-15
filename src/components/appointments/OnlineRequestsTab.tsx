@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
+import { toFarsiDigits, toEnglishDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
 import { 
   Globe, 
   CheckCircle2, 
@@ -315,7 +315,7 @@ export const OnlineRequestsTab: React.FC = () => {
                       
                       {/* Requested Date / Time Slot */}
                       <td className="py-3 px-3.5 font-bold text-slate-800 whitespace-nowrap">
-                        {toFarsiDigits(req.requestedDate)} - {toFarsiDigits(req.requestedTimeSlot)}
+                        {formatJalaliDateDisplay(req.requestedDate)} - {toFarsiDigits(req.requestedTimeSlot)}
                       </td>
                       
                       {/* Notes */}

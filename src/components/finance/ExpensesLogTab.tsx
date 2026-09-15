@@ -1,6 +1,6 @@
 import React from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { formatCurrency } from '../../utils/persianUtils';
+import { formatCurrency, toFarsiDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
 import { Plus, Sparkles, Stethoscope, Building2 } from 'lucide-react';
 
 export const ExpensesLogTab: React.FC = () => {
@@ -57,7 +57,7 @@ export const ExpensesLogTab: React.FC = () => {
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredExpenses.map((exp) => (
                 <tr key={exp.id} className="hover:bg-slate-50">
-                  <td className="py-3.5 px-4 font-bold text-slate-800">{exp.date}</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-800">{formatJalaliDateDisplay(exp.date)}</td>
                   <td className="py-3.5 px-4 font-bold text-slate-900">{exp.title}</td>
                   <td className="py-3.5 px-4">
                     <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg font-semibold text-[11px]">
@@ -85,7 +85,7 @@ export const ExpensesLogTab: React.FC = () => {
                     {formatCurrency(exp.amount)}
                   </td>
                   <td className="py-3.5 px-4 text-slate-500">{exp.recordedBy}</td>
-                  <td className="py-3.5 px-4 font-mono text-slate-500">{exp.receiptNumber || '-'}</td>
+                  <td className="py-3.5 px-4 font-mono text-slate-500">{exp.receiptNumber ? toFarsiDigits(exp.receiptNumber) : '-'}</td>
                 </tr>
               ))}
             </tbody>

@@ -8,14 +8,17 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { useClinic } from '../../context/ClinicContext';
-import { getTodayJalaliString, toFarsiDigits } from '../../utils/persianUtils';
+import { getTodayJalaliDate, toFarsiDigits } from '../../utils/persianUtils';
 import { PracticeScopeDropdown } from '../common/PracticeScopeDropdown';
+import { JalaliDatePicker } from '../common/JalaliDatePicker';
 
 export const TopBar: React.FC = () => {
   const { 
     userRole, 
     setUserRole, 
-    setIsGlobalSearchOpen
+    setIsGlobalSearchOpen,
+    dashboardDate,
+    setDashboardDate
   } = useClinic();
 
   const [currentTime, setCurrentTime] = useState<string>('');
@@ -46,6 +49,8 @@ export const TopBar: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [setIsGlobalSearchOpen]);
 
+  const todayStr = getTodayJalaliDate();
+
   return (
     <header className="sticky top-0 z-30 h-16 glass-header border-b border-slate-200 px-4 md:px-6 flex items-center justify-between shadow-xs">
       
@@ -66,11 +71,26 @@ export const TopBar: React.FC = () => {
         <PracticeScopeDropdown labelPrefix="انتخاب حوزه:" />
       </div>
 
-      {/* Middle: Jalali Date & Time Display */}
-      <div className="hidden xl:flex items-center gap-3 bg-slate-100/70 border border-slate-200 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-700">
-        <div className="flex items-center gap-1.5 text-slate-600">
-          <Calendar className="w-4 h-4 text-indigo-500" />
-          <span>{getTodayJalaliString()}</span>
+      {/* Middle: Jalali Date Picker for Dashboard & Time Display */}
+      <div className="hidden lg:flex items-center gap-3 bg-slate-100/70 border border-slate-200 px-3 py-1 rounded-xl text-xs font-medium text-slate-700">
+        <div className="flex items-center gap-2 text-slate-600">
+          <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+          <div className="w-36">
+            <JalaliDatePicker
+              value={dashboardDate || todayStr}
+              onChange={(newDate) => setDashboardDate(newDate || todayStr)}
+            />
+          </div>
+          {dashboardDate && dashboardDate !== todayStr && (
+            <button
+              type="button"
+              onClick={() => setDashboardDate(todayStr)}
+              className="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg text-[10px] font-bold cursor-pointer transition-colors whitespace-nowrap"
+              title="بازگشت به امروز"
+            >
+              امروز
+            </button>
+          )}
         </div>
         <div className="w-px h-3.5 bg-slate-300"></div>
         <div className="flex items-center gap-1.5 font-bold text-slate-800 dir-ltr">

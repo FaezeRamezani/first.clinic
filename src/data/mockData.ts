@@ -1,9 +1,26 @@
-import type { Doctor, ServiceItem, Patient, Appointment, OnlineRequest, FinancialTransaction, FollowUpTask, ClinicExpense } from '../types';
+import type { Doctor, ServiceItem, Patient, Appointment, OnlineRequest, FinancialTransaction, FollowUpTask, ClinicExpense, PaymentAccount, GlobalShiftsConfig } from '../types';
 import { getTodayJalaliDate, getJalaliDateOffset } from '../utils/persianUtils';
 
 const today = getTodayJalaliDate();
-const yesterday = getJalaliDateOffset(today, -1);
-const tomorrow = getJalaliDateOffset(today, 1);
+const d_m7 = getJalaliDateOffset(today, -7);
+const d_m6 = getJalaliDateOffset(today, -6);
+const d_m5 = getJalaliDateOffset(today, -5);
+const d_m4 = getJalaliDateOffset(today, -4);
+const d_m3 = getJalaliDateOffset(today, -3);
+const d_m2 = getJalaliDateOffset(today, -2);
+const d_m1 = getJalaliDateOffset(today, -1);
+const d_p1 = getJalaliDateOffset(today, 1);
+const d_p2 = getJalaliDateOffset(today, 2);
+const d_p3 = getJalaliDateOffset(today, 3);
+const d_p4 = getJalaliDateOffset(today, 4);
+const d_p5 = getJalaliDateOffset(today, 5);
+const d_p6 = getJalaliDateOffset(today, 6);
+const d_p7 = getJalaliDateOffset(today, 7);
+
+export const initialGlobalShifts: GlobalShiftsConfig = {
+  morning: { startTime: '09:00', endTime: '14:00' },
+  evening: { startTime: '16:00', endTime: '21:00' }
+};
 
 export const initialDoctors: Doctor[] = [
   {
@@ -13,8 +30,17 @@ export const initialDoctors: Doctor[] = [
     practice: 'aesthetic',
     phone: '۰۹۱۲۳۴۵۶۷۸۹',
     avatar: 'https://images.unsplash.com/photo-1594824813566-88855ce7896c?w=150&auto=format&fit=crop&q=80',
-    workingHours: 'شنبه تا چهارشنبه - ۱5:۰۰ الی ۲۰:۰۰',
-    color: 'indigo'
+    workingHours: 'شنبه تا چهارشنبه - شیفت صبح و عصر',
+    color: 'indigo',
+    weeklySchedule: [
+      { day: 'شنبه', morningActive: true, eveningActive: true },
+      { day: 'یکشنبه', morningActive: true, eveningActive: true },
+      { day: 'دوشنبه', morningActive: true, eveningActive: true },
+      { day: 'سه‌شنبه', morningActive: true, eveningActive: true },
+      { day: 'چهارشنبه', morningActive: true, eveningActive: true },
+      { day: 'پنج‌شنبه', morningActive: false, eveningActive: false },
+      { day: 'جمعه', morningActive: false, eveningActive: false }
+    ]
   },
   {
     id: 'doc-2',
@@ -23,9 +49,34 @@ export const initialDoctors: Doctor[] = [
     practice: 'dental',
     phone: '۰۹۱۲۹۸۷۶۵۴۳',
     avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
-    workingHours: 'شنبه تا پنج‌شنبه - ۰۹:۰۰ الی ۱7:۰۰',
-    color: 'teal'
+    workingHours: 'شنبه تا پنج‌شنبه - شیفت صبح و عصر',
+    color: 'teal',
+    weeklySchedule: [
+      { day: 'شنبه', morningActive: true, eveningActive: true },
+      { day: 'یکشنبه', morningActive: true, eveningActive: true },
+      { day: 'دوشنبه', morningActive: true, eveningActive: true },
+      { day: 'سه‌شنبه', morningActive: true, eveningActive: true },
+      { day: 'چهارشنبه', morningActive: true, eveningActive: true },
+      { day: 'پنج‌شنبه', morningActive: true, eveningActive: true },
+      { day: 'جمعه', morningActive: false, eveningActive: false }
+    ]
   }
+];
+
+export const initialPaymentAccounts: PaymentAccount[] = [
+  { id: 'acc-1', name: 'بانک ایران زمین', practice: 'aesthetic' },
+  { id: 'acc-2', name: 'بانک رفاه', practice: 'aesthetic' },
+  { id: 'acc-3', name: 'کارتخوان بانک سامان (مطب زیبایی)', practice: 'aesthetic' },
+  { id: 'acc-4', name: 'شیخ فضل‌الله (مجتبی)', practice: 'aesthetic' },
+  { id: 'acc-5', name: 'شیخ فضل‌الله (حسین)', practice: 'aesthetic' },
+  { id: 'acc-6', name: 'شیخ فضل‌الله (احمد)', practice: 'aesthetic' },
+  { id: 'acc-7', name: 'بانک سپه', practice: 'aesthetic' },
+  { id: 'acc-8', name: 'بانک تجارت', practice: 'aesthetic' },
+  { id: 'acc-9', name: 'بانک ملی', practice: 'aesthetic' },
+  { id: 'acc-10', name: 'نقد (مطب زیبایی)', practice: 'aesthetic' },
+  { id: 'acc-11', name: 'کارتخوان بانک پاسارگاد (مطب دندانپزشکی)', practice: 'dental' },
+  { id: 'acc-12', name: 'کارت به کارت (بانک ایران زمین)', practice: 'dental' },
+  { id: 'acc-13', name: 'نقد (مطب دندانپزشکی)', practice: 'dental' }
 ];
 
 export const initialServices: ServiceItem[] = [
@@ -54,11 +105,16 @@ export const initialPatients: Patient[] = [
     gender: 'female',
     birthDate: '۱۳۶۸/۰۵/۱۲',
     primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '101' },
+      { practice: 'dental', physicalFileNumber: '45' }
+    ],
     allergies: ['حساسیت به پنی‌سیلین'],
     medicalNotes: 'پیشینه تزریق بوتاکس ۳ ماه قبل، پوست حساس',
     emergencyContact: { name: 'رضا حسینی', phone: '۰۹۱۲۲۲۲۲۲۲۲', relation: 'همسر' },
-    balance: -2500000, // Debtor
-    createdAt: '۱۴۰۴/۱۲/۱۰'
+    balance: -2500000,
+    createdAt: '۱۴۰۴/۱۲/۱۰',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-2',
@@ -69,11 +125,16 @@ export const initialPatients: Patient[] = [
     gender: 'male',
     birthDate: '۱۳۶۲/۱۱/۲۰',
     primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '102' },
+      { practice: 'aesthetic', physicalFileNumber: '88' }
+    ],
     allergies: ['فشار خون بالا'],
     medicalNotes: 'تحت درمان ایمپلنت فک بالا راست',
     emergencyContact: { name: 'زهرا محمدی', phone: '۰۹۱۲۴۴۴۴۴۴۴', relation: 'خواهر' },
-    balance: -6000000, // Debtor (installment due today)
-    createdAt: '۱۴۰۵/۰۱/۱۵'
+    balance: -6000000,
+    createdAt: '۱۴۰۵/۰۱/۱۵',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-3',
@@ -84,11 +145,15 @@ export const initialPatients: Patient[] = [
     gender: 'female',
     birthDate: '۱۳۷۴/۰۲/۰۴',
     primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '103' }
+    ],
     allergies: [],
     medicalNotes: 'متقاضی دوره پاکسازی پوست ماهانه',
     emergencyContact: { name: 'علی رضایی', phone: '۰۹۱۲۶۶۶۶۶۶۶', relation: 'پدر' },
-    balance: 1000000, // Prepayment
-    createdAt: '۱۴۰۵/۰۲/۰۱'
+    balance: 0,
+    createdAt: '۱۴۰۵/۰۲/۰۱',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-4',
@@ -99,11 +164,15 @@ export const initialPatients: Patient[] = [
     gender: 'male',
     birthDate: '۱۳۷۰/۰۸/۱۵',
     primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '104' }
+    ],
     allergies: ['دیابت نوع ۲'],
     medicalNotes: 'نیاز به احتیاط در خونریزی لثه',
     emergencyContact: { name: 'نرگس کریمی', phone: '۰۹۱۲۸۸۸۸۸۸۸', relation: 'مادر' },
-    balance: 0, // Settled
-    createdAt: '۱۴۰۵/۰۳/۱۰'
+    balance: 0,
+    createdAt: '۱۴۰۵/۰۳/۱۰',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-5',
@@ -114,26 +183,34 @@ export const initialPatients: Patient[] = [
     gender: 'male',
     birthDate: '۱۳۵۸/۰۴/۳۰',
     primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '105' }
+    ],
     allergies: [],
     medicalNotes: 'روکش زارکونیا دندان‌های جلویی',
     emergencyContact: { name: 'مریم ابراهیمی', phone: '۰۹۱۲۰۰۰۰۰۰۰', relation: 'همسر' },
-    balance: -4500000, // Debtor
-    createdAt: '۱۴۰۵/۰۴/۰۵'
+    balance: -4500000,
+    createdAt: '۱۴۰۵/۰۴/۰۵',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-6',
     fileNumber: 'CL-1006',
-    nationalId: '۱۲۷۰۰۱۱۲۲۳',
+    nationalId: '۱۲۷۰۰۱۲۲۲۳',
     name: 'زهرا احمدی',
     mobile: '۰۹۱۹۱۱۱۱۲۲۲',
     gender: 'female',
     birthDate: '۱۳۷۸/۰۹/۲۵',
     primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '106' }
+    ],
     allergies: ['حساسیت به لیدوکائین'],
     medicalNotes: 'از بیحسی بدون اپی‌نفرین استفاده شود',
     emergencyContact: { name: 'محسن احمدی', phone: '۰۹۱۹۳۳۳۴۴۴۴', relation: 'برادر' },
     balance: 0,
-    createdAt: '۱۴۰۵/۰۴/۱۸'
+    createdAt: '۱۴۰۵/۰۴/۱۸',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-7',
@@ -144,11 +221,15 @@ export const initialPatients: Patient[] = [
     gender: 'male',
     birthDate: '۱۳۶۵/۰۶/۱۰',
     primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '107' }
+    ],
     allergies: [],
     medicalNotes: 'ترمیم کامپوزیت ۶ دندان خلفی',
     emergencyContact: { name: 'سمیرا کاظمی', phone: '۰۹۱۹۸۸۸۹۹۰۰', relation: 'همسر' },
     balance: -1500000,
-    createdAt: '۱۴۰۵/۰۵/۰۲'
+    createdAt: '۱۴۰۵/۰۵/۰۲',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-8',
@@ -159,11 +240,15 @@ export const initialPatients: Patient[] = [
     gender: 'female',
     birthDate: '۱۳۸۰/۰۱/۱۴',
     primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '108' }
+    ],
     allergies: [],
     medicalNotes: 'مزوتراپی صورت دوره ۳ جلسه‌ای',
     emergencyContact: { name: 'فرشته صادقی', phone: '۰۹۳۵۴۴۴۵۵۶۶', relation: 'مادر' },
-    balance: 2000000, // Prepayment
-    createdAt: '۱۴۰۵/۰۵/۲۰'
+    balance: 0,
+    createdAt: '۱۴۰۵/۰۵/۲۰',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-9',
@@ -174,11 +259,15 @@ export const initialPatients: Patient[] = [
     gender: 'male',
     birthDate: '۱۳۵۵/۰۳/۱۸',
     primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '109' }
+    ],
     allergies: ['مشکلات قلبی عروقی'],
     medicalNotes: 'قبل از جراحی مشاوره کاردیولوژی بررسی شود',
     emergencyContact: { name: 'وحید باقری', phone: '۰۹۳۶۱۱۱۲۲۳۳', relation: 'پسر' },
     balance: 0,
-    createdAt: '۱۴۰۵/۰۶/۰۱'
+    createdAt: '۱۴۰۵/۰۶/۰۱',
+    profileStatus: 'completed'
   },
   {
     id: 'pat-10',
@@ -189,18 +278,473 @@ export const initialPatients: Patient[] = [
     gender: 'female',
     birthDate: '۱۳۷۲/۱۲/۰۲',
     primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '110' }
+    ],
     allergies: [],
     medicalNotes: 'تزریق ژل خط خنده و گونه',
     emergencyContact: { name: 'شهاب شریفی', phone: '۰۹۳۷۷۷۷۸۸۹۹', relation: 'برادر' },
     balance: -3000000,
-    createdAt: '۱۴۰۵/۰۶/۱۰'
+    createdAt: '۱۴۰۵/۰۶/۱۰',
+    profileStatus: 'completed'
+  },
+  {
+    id: 'pat-11',
+    fileNumber: 'CL-1011',
+    nationalId: '۰۰۳۳۴۴۵۵۶۶',
+    name: 'پویا رحیمی',
+    mobile: '۰۹۱۲۸۸۸۹۹۰۰',
+    gender: 'male',
+    birthDate: '۱۳۶۶/۰۷/۱۴',
+    primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '111' }
+    ],
+    allergies: [],
+    medicalNotes: 'ایمپلنت فک پایین سمت چپ',
+    emergencyContact: { name: 'مینا رحیمی', phone: '۰۹۱۲۱۱۱۲۲۳۳', relation: 'همسر' },
+    balance: -5200000,
+    createdAt: '۱۴۰۵/۰۶/۱۱',
+    profileStatus: 'completed'
+  },
+  {
+    id: 'pat-12',
+    fileNumber: 'CL-1012',
+    nationalId: '۰۴۴۳۳۲۲۱۱۲',
+    name: 'شیما قربانی',
+    mobile: '۰۹۱۹۴۴۴۵۵۶۶',
+    gender: 'female',
+    birthDate: '۱۳۷۶/۰۳/۲۲',
+    primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '112' }
+    ],
+    allergies: [],
+    medicalNotes: 'فیشیال ماهانه و پاکسازی عمیق',
+    emergencyContact: { name: 'حسین قربانی', phone: '۰۹۱۹۷۷۷۸۸۹۹', relation: 'پدر' },
+    balance: -1800000,
+    createdAt: '۱۴۰۵/۰۶/۱۲',
+    profileStatus: 'completed'
+  },
+  {
+    id: 'pat-13',
+    fileNumber: 'CL-1013',
+    nationalId: '۰۰۲۲۳۳۴۴۵۵',
+    name: 'امید طاهری',
+    mobile: '۰۹۳۵۷۷۷۸۸۹۹',
+    gender: 'male',
+    birthDate: '۱۳۶۰/۱۰/۰۸',
+    primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '113' }
+    ],
+    allergies: [],
+    medicalNotes: 'روکش سرامیکی دندان آسیاب',
+    emergencyContact: { name: 'مریم طاهری', phone: '۰۹۳۵۱۱۱۲۲۴۴', relation: 'همسر' },
+    balance: -3500000,
+    createdAt: '۱۴۰۵/۰۶/۱۳',
+    profileStatus: 'completed'
+  },
+  {
+    id: 'pat-14',
+    fileNumber: 'CL-1014',
+    nationalId: '۰۸۷۶۵۴۳۲۱۰',
+    name: 'مونا کاظمی',
+    mobile: '۰۹۱۲۶۶۶۷۷۸۸',
+    gender: 'female',
+    birthDate: '۱۳۷۷/۱۱/۰۵',
+    primaryPractice: 'aesthetic',
+    memberships: [
+      { practice: 'aesthetic', physicalFileNumber: '114' },
+      { practice: 'dental', physicalFileNumber: '62' }
+    ],
+    allergies: [],
+    medicalNotes: 'دوره بوتاکس پیشانی و چشم',
+    emergencyContact: { name: 'جواد کاظمی', phone: '۰۹۱۲۳۳۳۴۴۵۵', relation: 'برادر' },
+    balance: 0,
+    createdAt: '۱۴۰۵/۰۶/۱۴',
+    profileStatus: 'completed'
+  },
+  {
+    id: 'pat-15',
+    fileNumber: 'CL-1015',
+    nationalId: '۰۰۱۲۲۳۳۴۴۵',
+    name: 'بهزاد ملکی',
+    mobile: '۰۹۱۹۲۲۲۳۳۴۴',
+    gender: 'male',
+    birthDate: '۱۳۵۲/۰۸/۳۰',
+    primaryPractice: 'dental',
+    memberships: [
+      { practice: 'dental', physicalFileNumber: '115' }
+    ],
+    allergies: ['فشار خون بالا'],
+    medicalNotes: 'درمان ریشه دندان ۶ و ۷',
+    emergencyContact: { name: 'ناهید ملکی', phone: '۰۹۱۹۶۶۶۷۷۸۸', relation: 'همسر' },
+    balance: -2000000,
+    createdAt: '۱۴۰۵/۰۶/۱۵',
+    profileStatus: 'completed'
   }
 ];
 
 export const initialAppointments: Appointment[] = [
-  // Today's appointments (relative to REAL TODAY)
+  // Day -7
   {
-    id: 'apt-1',
+    id: 'apt-m7-1',
+    patientId: 'pat-15',
+    patientName: 'بهزاد ملکی',
+    patientMobile: '۰۹۱۹۲۲۲۳۳۴۴',
+    fileNumber: 'CL-1015',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m7,
+    timeSlot: '۰۹:۳۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'درمان ریشه دندان ۶ انجام شد',
+    serviceId: 'srv-7',
+    serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-m7-2',
+    patientId: 'pat-14',
+    patientName: 'مونا کاظمی',
+    patientMobile: '۰۹۱۲۶۶۶۷۷۸۸',
+    fileNumber: 'CL-1014',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m7,
+    timeSlot: '۱۴:۰۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'تزریق ژل انجام شد',
+    serviceId: 'srv-2',
+    serviceName: 'تزریق ژل لب (۱ سی‌سی)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+
+  // Day -6
+  {
+    id: 'apt-m6-1',
+    patientId: 'pat-1',
+    patientName: 'مریم حسینی',
+    patientMobile: '۰۹۱۲۱۱۱۱۱۱۱',
+    fileNumber: 'CL-1001',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m6,
+    timeSlot: '۱۰:۰۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'تزریق بوتاکس کامل و فیشیال صورت',
+    serviceId: 'srv-1',
+    serviceName: 'بوتاکس کامل صورت (دیسپورت)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+  {
+    id: 'apt-m6-2',
+    patientId: 'pat-3',
+    patientName: 'سارا رضایی',
+    patientMobile: '۰۹۱۲۵۵۵۵۵۵۵',
+    fileNumber: 'CL-1003',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m6,
+    timeSlot: '۱۱:۳۰',
+    duration: 30,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'جلسه دوم مزوتراپی مو',
+    serviceId: 'srv-4',
+    serviceName: 'مزوتراپی تقویت مو',
+    cabinetNumber: 'اتاق پوست ۲'
+  },
+  {
+    id: 'apt-m6-3',
+    patientId: 'pat-6',
+    patientName: 'زهرا احمدی',
+    patientMobile: '۰۹۱۹۱۱۱۱۲۲۲',
+    fileNumber: 'CL-1006',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m6,
+    timeSlot: '۱۶:۰۰',
+    duration: 30,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'تزریق بوتاکس دیسپورت پیشانی',
+    serviceId: 'srv-1',
+    serviceName: 'بوتاکس کامل صورت (دیسپورت)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+
+  // Day -5
+  {
+    id: 'apt-m5-1',
+    patientId: 'pat-12',
+    patientName: 'شیما قربانی',
+    patientMobile: '۰۹۱۹۴۴۴۵۵۶۶',
+    fileNumber: 'CL-1012',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m5,
+    timeSlot: '۱۵:۳۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'فیشیال تخصصی انجام شد',
+    serviceId: 'srv-3',
+    serviceName: 'پاکسازی و فیشیال تخصصی',
+    cabinetNumber: 'اتاق پوست ۲'
+  },
+  {
+    id: 'apt-m5-2',
+    patientId: 'pat-10',
+    patientName: 'الهام شریفی',
+    patientMobile: '۰۹۳۷۴۴۴۵۵۶۶',
+    fileNumber: 'CL-1010',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m5,
+    timeSlot: '۱۷:۰۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'تزریق ژل خط خنده',
+    serviceId: 'srv-2',
+    serviceName: 'تزریق ژل لب (۱ سی‌سی)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+
+  // Day -4
+  {
+    id: 'apt-m4-1',
+    patientId: 'pat-5',
+    patientName: 'رضا ابراهیمی',
+    patientMobile: '۰۹۱۲۹۹۹۹۹۹۹',
+    fileNumber: 'CL-1005',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m4,
+    timeSlot: '۱۱:۰۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'کامپوزیت فک بالا',
+    serviceId: 'srv-6',
+    serviceName: 'کامپوزیت ونیر هر دندان',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-m4-2',
+    patientId: 'pat-8',
+    patientName: 'نیلوفر صادقی',
+    patientMobile: '۰۹۳۵۱۱۱۲۲۳۳',
+    fileNumber: 'CL-1008',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m4,
+    timeSlot: '۱۷:۳۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'لیزر فول بادی جلسه سوم',
+    serviceId: 'srv-5',
+    serviceName: 'لیزر موهای زائد فول بادی',
+    cabinetNumber: 'اتاق پوست ۲'
+  },
+  {
+    id: 'apt-m4-3',
+    patientId: 'pat-9',
+    patientName: 'کامران باقری',
+    patientMobile: '۰۹۳۶۷۷۷۸۸۹۹',
+    fileNumber: 'CL-1009',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m4,
+    timeSlot: '۱۰:۰۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'تحویل روکش زارکونیا دندان ۴ بالا',
+    serviceId: 'srv-9',
+    serviceName: 'روکش تمام سرامیک زارکونیا',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+
+  // Day -3
+  {
+    id: 'apt-m3-1',
+    patientId: 'pat-2',
+    patientName: 'علیرضا محمدی',
+    patientMobile: '۰۹۱۲۳۳۳۳۳۳۳',
+    fileNumber: 'CL-1002',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m3,
+    timeSlot: '۰۹:۰۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'مرحله اول جراحی ایمپلنت انجام شد',
+    serviceId: 'srv-10',
+    serviceName: 'کاشت ایمپلنت سوئیسی',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-m3-2',
+    patientId: 'pat-5',
+    patientName: 'رضا ابراهیمی',
+    patientMobile: '۰۹۱۲۹۹۹۹۹۹۹',
+    fileNumber: 'CL-1005',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m3,
+    timeSlot: '۱۴:۳۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'آماده‌سازی دندان‌ها جهت کامپوزیت',
+    serviceId: 'srv-6',
+    serviceName: 'کامپوزیت ونیر هر دندان',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+
+  // Day -2
+  {
+    id: 'apt-m2-1',
+    patientId: 'pat-7',
+    patientName: 'مهدی کاظمی',
+    patientMobile: '۰۹۱۹۵۵۵۶۶۷۷',
+    fileNumber: 'CL-1007',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m2,
+    timeSlot: '۱۰:۳۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'عصب‌کشی انجام شد',
+    serviceId: 'srv-7',
+    serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-m2-2',
+    patientId: 'pat-11',
+    patientName: 'پویا رحیمی',
+    patientMobile: '۰۹۱۲۸۸۸۹۹۰۰',
+    fileNumber: 'CL-1011',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m2,
+    timeSlot: '۱۲:۰۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'کاشت ایمپلنت فک پایین',
+    serviceId: 'srv-10',
+    serviceName: 'کاشت ایمپلنت سوئیسی',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+  {
+    id: 'apt-m2-3',
+    patientId: 'pat-13',
+    patientName: 'امید طاهری',
+    patientMobile: '۰۹۳۵۷۷۷۸۸۹۹',
+    fileNumber: 'CL-1013',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m2,
+    timeSlot: '۱۵:۰۰',
+    duration: 45,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'قالب‌گیری روکش دندان خلفی',
+    serviceId: 'srv-9',
+    serviceName: 'روکش تمام سرامیک زارکونیا',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+
+  // Day -1 (Yesterday)
+  {
+    id: 'apt-m1-1',
+    patientId: 'pat-6',
+    patientName: 'زهرا احمدی',
+    patientMobile: '۰۹۱۹۱۱۱۱۲۲۲',
+    fileNumber: 'CL-1006',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m1,
+    timeSlot: '۱۷:۰۰',
+    duration: 45,
+    status: 'unsettled',
+    presenceStatus: 'present',
+    notes: 'نوبت دیروز - نیازمند تعیین تکلیف',
+    serviceId: 'srv-2',
+    serviceName: 'تزریق ژل لب (۱ سی‌سی)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+  {
+    id: 'apt-m1-2',
+    patientId: 'pat-7',
+    patientName: 'مهدی کاظمی',
+    patientMobile: '۰۹۱۹۵۵۵۶۶۷۷',
+    fileNumber: 'CL-1007',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_m1,
+    timeSlot: '۱۸:۰۰',
+    duration: 60,
+    status: 'completed',
+    presenceStatus: 'present',
+    notes: 'پرکردن نهایی دندان عصب‌کشی‌شده',
+    serviceId: 'srv-7',
+    serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-m1-3',
+    patientId: 'pat-8',
+    patientName: 'نیلوفر صادقی',
+    patientMobile: '۰۹۳۵۱۱۱۲۲۳۳',
+    fileNumber: 'CL-1008',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_m1,
+    timeSlot: '۱۵:۰۰',
+    duration: 30,
+    status: 'canceled',
+    cancellationType: 'no_replacement',
+    cancellationReason: 'انصراف بیمار به دلیل مسافرت',
+    canceledAt: d_m1,
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+
+  // Today
+  {
+    id: 'apt-t-1',
     patientId: 'pat-1',
     patientName: 'مریم حسینی',
     patientMobile: '۰۹۱۲۱۱۱۱۱۱۱',
@@ -219,7 +763,7 @@ export const initialAppointments: Appointment[] = [
     cabinetNumber: 'اتاق پوست ۱'
   },
   {
-    id: 'apt-2',
+    id: 'apt-t-2',
     patientId: 'pat-2',
     patientName: 'علیرضا محمدی',
     patientMobile: '۰۹۱۲۳۳۳۳۳۳۳',
@@ -238,7 +782,7 @@ export const initialAppointments: Appointment[] = [
     cabinetNumber: 'یونیت دندانپزشکی ۲'
   },
   {
-    id: 'apt-3',
+    id: 'apt-t-3',
     patientId: 'pat-3',
     patientName: 'سارا رضایی',
     patientMobile: '۰۹۱۲۵۵۵۵۵۵۵',
@@ -251,13 +795,13 @@ export const initialAppointments: Appointment[] = [
     duration: 60,
     status: 'completed',
     presenceStatus: 'present',
-    notes: 'فیشیال انجام شد و بیعانه ثبت گردید',
+    notes: 'فیشیال انجام شد و تسویه گردید',
     serviceId: 'srv-3',
     serviceName: 'پاکسازی و فیشیال تخصصی',
     cabinetNumber: 'اتاق پوست ۲'
   },
   {
-    id: 'apt-4',
+    id: 'apt-t-4',
     patientId: 'pat-4',
     patientName: 'امیرحسین کریمی',
     patientMobile: '۰۹۱۲۷۷۷۷۷۷۷',
@@ -276,7 +820,7 @@ export const initialAppointments: Appointment[] = [
     cabinetNumber: 'یونیت دندانپزشکی ۱'
   },
   {
-    id: 'apt-5',
+    id: 'apt-t-5',
     patientId: 'pat-5',
     patientName: 'رضا ابراهیمی',
     patientMobile: '۰۹۱۲۹۹۹۹۹۹۹',
@@ -294,66 +838,10 @@ export const initialAppointments: Appointment[] = [
     serviceName: 'روکش تمام سرامیک زارکونیا',
     cabinetNumber: 'یونیت دندانپزشکی ۲'
   },
-  // Past appointments (Yesterday)
+
+  // Day +1 (Tomorrow)
   {
-    id: 'apt-6',
-    patientId: 'pat-6',
-    patientName: 'زهرا احمدی',
-    patientMobile: '۰۹۱۹۱۱۱۱۲۲۲',
-    fileNumber: 'CL-1006',
-    doctorId: 'doc-1',
-    doctorName: 'دکتر فهیمه رمضانی',
-    practice: 'aesthetic',
-    date: yesterday,
-    timeSlot: '۱۷:۰۰',
-    duration: 45,
-    status: 'pending',
-    presenceStatus: 'pending',
-    notes: 'نوبت دیروز - هنوز تعیین تکلیف نشده (نیازمند پیگیری)',
-    serviceId: 'srv-2',
-    serviceName: 'تزریق ژل لب (۱ سی‌سی)',
-    cabinetNumber: 'اتاق پوست ۱'
-  },
-  {
-    id: 'apt-7',
-    patientId: 'pat-7',
-    patientName: 'مهدی کاظمی',
-    patientMobile: '۰۹۱۹۵۵۵۶۶۷۷',
-    fileNumber: 'CL-1007',
-    doctorId: 'doc-2',
-    doctorName: 'دکتر مجتبی آخرتی',
-    practice: 'dental',
-    date: yesterday,
-    timeSlot: '۱۸:۰۰',
-    duration: 60,
-    status: 'completed',
-    presenceStatus: 'present',
-    notes: 'عصب‌کشی انجام شد و تسویه گردید',
-    serviceId: 'srv-7',
-    serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
-    cabinetNumber: 'یونیت دندانپزشکی ۱'
-  },
-  {
-    id: 'apt-8',
-    patientId: 'pat-8',
-    patientName: 'نیلوفر صادقی',
-    patientMobile: '۰۹۳۵۱۱۱۲۲۳۳',
-    fileNumber: 'CL-1008',
-    doctorId: 'doc-1',
-    doctorName: 'دکتر فهیمه رمضانی',
-    practice: 'aesthetic',
-    date: yesterday,
-    timeSlot: '۱۵:۰۰',
-    duration: 30,
-    status: 'canceled',
-    cancellationType: 'no_replacement',
-    cancellationReason: 'انصراف بیمار به دلیل عدم امکان حضور',
-    canceledAt: yesterday,
-    cabinetNumber: 'اتاق پوست ۱'
-  },
-  // Future appointments (Tomorrow)
-  {
-    id: 'apt-9',
+    id: 'apt-p1-1',
     patientId: 'pat-10',
     patientName: 'الهام شریفی',
     patientMobile: '۰۹۳۷۴۴۴۵۵۶۶',
@@ -361,7 +849,7 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
     practice: 'aesthetic',
-    date: tomorrow,
+    date: d_p1,
     timeSlot: '۰۹:۳۰',
     duration: 45,
     status: 'pending',
@@ -372,7 +860,7 @@ export const initialAppointments: Appointment[] = [
     cabinetNumber: 'اتاق پوست ۱'
   },
   {
-    id: 'apt-10',
+    id: 'apt-p1-2',
     patientId: 'pat-9',
     patientName: 'کامران باقری',
     patientMobile: '۰۹۳۶۷۷۷۸۸۹۹',
@@ -380,7 +868,7 @@ export const initialAppointments: Appointment[] = [
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
     practice: 'dental',
-    date: tomorrow,
+    date: d_p1,
     timeSlot: '۱۰:۳۰',
     duration: 45,
     status: 'pending',
@@ -388,6 +876,246 @@ export const initialAppointments: Appointment[] = [
     notes: 'مشاوره کامپوزیت فک بالا',
     serviceId: 'srv-6',
     serviceName: 'کامپوزیت ونیر هر دندان',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+  {
+    id: 'apt-p1-3',
+    patientId: 'pat-14',
+    patientName: 'مونا کاظمی',
+    patientMobile: '۰۹۱۲۶۶۶۷۷۸۸',
+    fileNumber: 'CL-1014',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_p1,
+    timeSlot: '۱۵:۰۰',
+    duration: 60,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'جلسه جدید پاکسازی پوست',
+    serviceId: 'srv-3',
+    serviceName: 'پاکسازی و فیشیال تخصصی',
+    cabinetNumber: 'اتاق پوست ۲'
+  },
+
+  // Day +2
+  {
+    id: 'apt-p2-1',
+    patientId: 'pat-7',
+    patientName: 'مهدی کاظمی',
+    patientMobile: '۰۹۱۹۵۵۵۶۶۷۷',
+    fileNumber: 'CL-1007',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p2,
+    timeSlot: '۱۱:۰۰',
+    duration: 60,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'معاینه دوره پس از عصب‌کشی',
+    serviceId: 'srv-7',
+    serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-p2-2',
+    patientId: 'pat-12',
+    patientName: 'شیما قربانی',
+    patientMobile: '۰۹۱۹۴۴۴۵۵۶۶',
+    fileNumber: 'CL-1012',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_p2,
+    timeSlot: '۱۶:۰۰',
+    duration: 30,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'تزریق بوتاکس دیسپورت',
+    serviceId: 'srv-1',
+    serviceName: 'بوتاکس کامل صورت (دیسپورت)',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+  {
+    id: 'apt-p2-3',
+    patientId: 'pat-15',
+    patientName: 'بهزاد ملکی',
+    patientMobile: '۰۹۱۹۲۲۲۳۳۴۴',
+    fileNumber: 'CL-1015',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p2,
+    timeSlot: '۱۷:۳۰',
+    duration: 45,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'قالب‌گیری روکش زارکونیا',
+    serviceId: 'srv-9',
+    serviceName: 'روکش تمام سرامیک زارکونیا',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+
+  // Day +3
+  {
+    id: 'apt-p3-1',
+    patientId: 'pat-3',
+    patientName: 'سارا رضایی',
+    patientMobile: '۰۹۱۲۵۵۵۵۵۵۵',
+    fileNumber: 'CL-1003',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_p3,
+    timeSlot: '۱۰:۰۰',
+    duration: 30,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'جلسه بعدی مزوتراپی مو',
+    serviceId: 'srv-4',
+    serviceName: 'مزوتراپی تقویت مو',
+    cabinetNumber: 'اتاق پوست ۲'
+  },
+  {
+    id: 'apt-p3-2',
+    patientId: 'pat-11',
+    patientName: 'پویا رحیمی',
+    patientMobile: '۰۹۱۲۸۸۸۹۹۰۰',
+    fileNumber: 'CL-1011',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p3,
+    timeSlot: '۱۴:۰۰',
+    duration: 30,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'بررسی لثه و جرم‌گیری',
+    serviceId: 'srv-8',
+    serviceName: 'جرم‌گیری و بروساژ دو فک',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+
+  // Day +4
+  {
+    id: 'apt-p4-1',
+    patientId: 'pat-11',
+    patientName: 'پویا رحیمی',
+    patientMobile: '۰۹۱۲۸۸۸۹۹۰۰',
+    fileNumber: 'CL-1011',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p4,
+    timeSlot: '۰۹:۳۰',
+    duration: 60,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'نصب پروتز ایمپلنت',
+    serviceId: 'srv-10',
+    serviceName: 'کاشت ایمپلنت سوئیسی',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+  {
+    id: 'apt-p4-2',
+    patientId: 'pat-8',
+    patientName: 'نیلوفر صادقی',
+    patientMobile: '۰۹۳۵۱۱۱۲۲۳۳',
+    fileNumber: 'CL-1008',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_p4,
+    timeSlot: '۱۴:۳۰',
+    duration: 60,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'جلسه چهارم لیزر فول بادی',
+    serviceId: 'srv-5',
+    serviceName: 'لیزر موهای زائد فول بادی',
+    cabinetNumber: 'اتاق پوست ۲'
+  },
+
+  // Day +5
+  {
+    id: 'apt-p5-1',
+    patientId: 'pat-13',
+    patientName: 'امید طاهری',
+    patientMobile: '۰۹۳۵۷۷۷۸۸۹۹',
+    fileNumber: 'CL-1013',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p5,
+    timeSlot: '۱۰:۰۰',
+    duration: 45,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'نصب کامپوزیت دندان‌های جلویی',
+    serviceId: 'srv-6',
+    serviceName: 'کامپوزیت ونیر هر دندان',
+    cabinetNumber: 'یونیت دندانپزشکی ۱'
+  },
+  {
+    id: 'apt-p5-2',
+    patientId: 'pat-2',
+    patientName: 'علیرضا محمدی',
+    patientMobile: '۰۹۱۲۳۳۳۳۳۳۳',
+    fileNumber: 'CL-1002',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p5,
+    timeSlot: '۱۱:۳۰',
+    duration: 60,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'عصب‌کشی دندان آسیاب دوم',
+    serviceId: 'srv-7',
+    serviceName: 'عصب‌کشی و پرکردن ۲ کانال',
+    cabinetNumber: 'یونیت دندانپزشکی ۲'
+  },
+
+  // Day +6
+  {
+    id: 'apt-p6-1',
+    patientId: 'pat-1',
+    patientName: 'مریم حسینی',
+    patientMobile: '۰۹۱۲۱۱۱۱۱۱۱',
+    fileNumber: 'CL-1001',
+    doctorId: 'doc-1',
+    doctorName: 'دکتر فهیمه رمضانی',
+    practice: 'aesthetic',
+    date: d_p6,
+    timeSlot: '۱۵:۰۰',
+    duration: 60,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'دوره پاکسازی و ترمیم پوست',
+    serviceId: 'srv-3',
+    serviceName: 'پاکسازی و فیشیال تخصصی',
+    cabinetNumber: 'اتاق پوست ۱'
+  },
+
+  // Day +7
+  {
+    id: 'apt-p7-1',
+    patientId: 'pat-5',
+    patientName: 'رضا ابراهیمی',
+    patientMobile: '۰۹۱۲۹۹۹۹۹۹۹',
+    fileNumber: 'CL-1005',
+    doctorId: 'doc-2',
+    doctorName: 'دکتر مجتبی آخرتی',
+    practice: 'dental',
+    date: d_p7,
+    timeSlot: '۰۹:۰۰',
+    duration: 30,
+    status: 'pending',
+    presenceStatus: 'pending',
+    notes: 'جرم‌گیری دوره جدید',
+    serviceId: 'srv-8',
+    serviceName: 'جرم‌گیری و بروساژ دو فک',
     cabinetNumber: 'یونیت دندانپزشکی ۲'
   }
 ];
@@ -401,11 +1129,11 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'aesthetic',
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
-    requestedDate: tomorrow,
+    requestedDate: d_p1,
     requestedTimeSlot: '۱۶:۳۰',
     notes: 'درخواست بوتاکس صورت و مشاوره پوست',
     status: 'pending',
-    createdAt: `${yesterday} - ۲۱:۴۰`
+    createdAt: `${d_m1} - ۲۱:۴۰`
   },
   {
     id: 'req-2',
@@ -429,7 +1157,7 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'aesthetic',
     doctorId: 'doc-1',
     doctorName: 'دکتر فهیمه رمضانی',
-    requestedDate: getJalaliDateOffset(today, 2),
+    requestedDate: d_p2,
     requestedTimeSlot: '۱۸:۰۰',
     notes: 'تزریق ژل لب سبک ناتشورال',
     status: 'pending',
@@ -443,11 +1171,11 @@ export const initialOnlineRequests: OnlineRequest[] = [
     targetPractice: 'dental',
     doctorId: 'doc-2',
     doctorName: 'دکتر مجتبی آخرتی',
-    requestedDate: getJalaliDateOffset(today, 3),
+    requestedDate: d_p3,
     requestedTimeSlot: '۰۹:۳۰',
     notes: 'مشاوره کامپوزیت ۱۰ واحد فک بالا',
     status: 'approved',
-    createdAt: `${yesterday} - ۱۵:۱۰`
+    createdAt: `${d_m1} - ۱۵:۱۰`
   }
 ];
 
@@ -457,7 +1185,7 @@ export const initialTransactions: FinancialTransaction[] = [
     patientId: 'pat-3',
     patientName: 'سارا رضایی',
     fileNumber: 'CL-1003',
-    appointmentId: 'apt-3',
+    appointmentId: 'apt-t-3',
     practice: 'aesthetic',
     date: today,
     serviceName: 'پاکسازی و فیشیال تخصصی',
@@ -467,7 +1195,7 @@ export const initialTransactions: FinancialTransaction[] = [
     paidAmount: 1000000,
     remainingDebt: 0,
     paymentMethod: 'pos_aesthetic',
-    posAccount: 'کارتخوان بانک سامان (مطب زیبایی)',
+    posAccount: 'کارتخوان بانک ایران زمین (مطب زیبایی)',
     notes: 'تسویه کامل انجام شد'
   },
   {
@@ -476,7 +1204,7 @@ export const initialTransactions: FinancialTransaction[] = [
     patientName: 'مریم حسینی',
     fileNumber: 'CL-1001',
     practice: 'aesthetic',
-    date: getJalaliDateOffset(today, -6),
+    date: d_m6,
     serviceName: 'تزریق ژل گونه و لب',
     totalCost: 9000000,
     discount: 500000,
@@ -484,7 +1212,7 @@ export const initialTransactions: FinancialTransaction[] = [
     paidAmount: 6000000,
     remainingDebt: 2500000,
     paymentMethod: 'pos_aesthetic',
-    posAccount: 'کارتخوان بانک سامان (مطب زیبایی)',
+    posAccount: 'کارتخوان بانک ایران زمین (مطب زیبایی)',
     debtDueDate: today,
     notes: 'مبلغ ۲.۵ میلیون بدهی باقی‌مانده سررسید امروز'
   },
@@ -494,7 +1222,7 @@ export const initialTransactions: FinancialTransaction[] = [
     patientName: 'علیرضا محمدی',
     fileNumber: 'CL-1002',
     practice: 'dental',
-    date: getJalaliDateOffset(today, -15),
+    date: d_m7,
     serviceName: 'مرحله اول ایمپلنت سوئیسی',
     totalCost: 16500000,
     discount: 500000,
@@ -502,8 +1230,8 @@ export const initialTransactions: FinancialTransaction[] = [
     paidAmount: 10000000,
     remainingDebt: 6000000,
     paymentMethod: 'pos_dental',
-    posAccount: 'کارتخوان بانک پاسارگاد (مطب دندانپزشکی)',
-    debtDueDate: '۱۴۰۵-۰۶-۱۶', // Due today!
+    posAccount: 'کارتخوان (مطب دندانپزشکی)',
+    debtDueDate: today,
     notes: 'قسط دوم ایمپلنت سررسید امروز'
   },
   {
@@ -512,7 +1240,7 @@ export const initialTransactions: FinancialTransaction[] = [
     patientName: 'رضا ابراهیمی',
     fileNumber: 'CL-1005',
     practice: 'dental',
-    date: '۱۴۰۵-۰۶-۰۵',
+    date: d_m3,
     serviceName: 'کامپوزیت ونیر فک بالا',
     totalCost: 12800000,
     discount: 800000,
@@ -520,9 +1248,117 @@ export const initialTransactions: FinancialTransaction[] = [
     paidAmount: 7500000,
     remainingDebt: 4500000,
     paymentMethod: 'card_transfer',
-    posAccount: 'حساب بانک ملی (مطب دندانپزشکی)',
-    debtDueDate: '۱۴۰۵-۰۶-۲۵',
+    posAccount: 'کارت به کارت (بانک ایران زمین)',
+    debtDueDate: d_m2,
     notes: 'پرداخت بخشی از هزینه ونیر'
+  },
+  {
+    id: 'trx-5',
+    patientId: 'pat-10',
+    patientName: 'الهام شریفی',
+    fileNumber: 'CL-1010',
+    practice: 'aesthetic',
+    date: d_m5,
+    serviceName: 'تزریق ژل خط خنده',
+    totalCost: 6000000,
+    discount: 0,
+    netCost: 6000000,
+    paidAmount: 3000000,
+    remainingDebt: 3000000,
+    paymentMethod: 'pos_aesthetic',
+    posAccount: 'کارتخوان بانک ایران زمین (مطب زیبایی)',
+    debtDueDate: d_m4,
+    notes: 'مانده بدهی فیلر لب و خط خنده'
+  },
+  {
+    id: 'trx-6',
+    patientId: 'pat-12',
+    patientName: 'شیما قربانی',
+    fileNumber: 'CL-1012',
+    practice: 'aesthetic',
+    date: d_m6,
+    serviceName: 'فیشیال و میکرودرم',
+    totalCost: 3000000,
+    discount: 0,
+    netCost: 3000000,
+    paidAmount: 1200000,
+    remainingDebt: 1800000,
+    paymentMethod: 'pos_aesthetic',
+    posAccount: 'کارتخوان بانک ایران زمین (مطب زیبایی)',
+    debtDueDate: d_m5,
+    notes: 'بدهی خدمات فیشیال'
+  },
+  {
+    id: 'trx-7',
+    patientId: 'pat-7',
+    patientName: 'مهدی کاظمی',
+    fileNumber: 'CL-1007',
+    practice: 'dental',
+    date: d_m1,
+    serviceName: 'عصب کشی و پرکردن',
+    totalCost: 4200000,
+    discount: 0,
+    netCost: 4200000,
+    paidAmount: 2700000,
+    remainingDebt: 1500000,
+    paymentMethod: 'pos_dental',
+    posAccount: 'کارتخوان (مطب دندانپزشکی)',
+    debtDueDate: d_p2,
+    notes: 'قسط باقیمانده عصب‌کشی سررسید ۲ روز بعد'
+  },
+  {
+    id: 'trx-8',
+    patientId: 'pat-11',
+    patientName: 'پویا رحیمی',
+    fileNumber: 'CL-1011',
+    practice: 'dental',
+    date: d_m2,
+    serviceName: 'ایمپلنت سوئیسی فک پایین',
+    totalCost: 16500000,
+    discount: 0,
+    netCost: 16500000,
+    paidAmount: 11300000,
+    remainingDebt: 5200000,
+    paymentMethod: 'pos_dental',
+    posAccount: 'کارتخوان (مطب دندانپزشکی)',
+    debtDueDate: d_p4,
+    notes: 'باقیمانده اقساط ایمپلنت'
+  },
+  {
+    id: 'trx-9',
+    patientId: 'pat-13',
+    patientName: 'امید طاهری',
+    fileNumber: 'CL-1013',
+    practice: 'dental',
+    date: d_m2,
+    serviceName: 'روکش زارکونیا دندان خلفی',
+    totalCost: 5800000,
+    discount: 0,
+    netCost: 5800000,
+    paidAmount: 2300000,
+    remainingDebt: 3500000,
+    paymentMethod: 'card_transfer',
+    posAccount: 'کارت به کارت (بانک ایران زمین)',
+    debtDueDate: d_p5,
+    notes: 'سررسید بدهی روکش دندان'
+  },
+  {
+    id: 'trx-10',
+    patientId: 'pat-15',
+    patientName: 'بهزاد ملکی',
+    fileNumber: 'CL-1015',
+    practice: 'dental',
+    date: d_m7,
+    serviceName: 'درمان ریشه دندان ۶',
+    totalCost: 4200000,
+    discount: 0,
+    netCost: 4200000,
+    paidAmount: 2200000,
+    remainingDebt: 2000000,
+    paymentMethod: 'pos_dental',
+    posAccount: 'کارتخوان (مطب دندانپزشکی)',
+    debtDueDate: d_m7,
+    notes: 'بدهی درمان ریشه'
   }
 ];
 
@@ -538,7 +1374,7 @@ export const initialFollowUps: FollowUpTask[] = [
     practice: 'aesthetic',
     type: 'debt_reminder',
     description: 'پیگیری وصول قسط بدهی سررسیدشده ۲.۵ میلیون تومانی بوتاکس/ژل',
-    dueDate: '۱۴۰۵-۰۶-۱۶',
+    dueDate: today,
     status: 'pending'
   },
   {
@@ -552,7 +1388,7 @@ export const initialFollowUps: FollowUpTask[] = [
     practice: 'dental',
     type: 'debt_reminder',
     description: 'تماس جهت دریافت قسط ۶ میلیونی ایمپلنت دندان',
-    dueDate: '۱۴۰۵-۰۶-۱۶',
+    dueDate: today,
     status: 'pending'
   },
   {
@@ -566,7 +1402,7 @@ export const initialFollowUps: FollowUpTask[] = [
     practice: 'dental',
     type: 'lab_result',
     description: 'تحویل گرفتن قالب روکش زارکونیا از لابراتوار دندانپزشکی',
-    dueDate: '۱۴۰۵-۰۶-۱۶',
+    dueDate: today,
     status: 'pending'
   },
   {
@@ -580,10 +1416,10 @@ export const initialFollowUps: FollowUpTask[] = [
     practice: 'aesthetic',
     type: 'post_op',
     description: 'پیگیری وضعیت تورم و رضایت بیمار ۲۴ ساعت پس از تزریق ژل',
-    dueDate: '۱۴۰۵-۰۶-۱۶',
+    dueDate: today,
     status: 'called_confirmed',
     resultNote: 'تماس گرفته شد - بیمار ابراز رضایت نمود و تورم خفیف دارد.',
-    updatedAt: '۱۴۰۵/۰۶/۱۶ - ۰۹:۴۵'
+    updatedAt: `${today} - ۰۹:۴۵`
   }
 ];
 
@@ -593,7 +1429,7 @@ export const initialExpenses: ClinicExpense[] = [
     title: 'خرید مواد کامپوزیت و سوزن انستزی دندانپزشکی',
     category: 'consumables',
     amount: 8500000,
-    date: '۱۴۰۵-۰۶-۱۴',
+    date: d_m2,
     practice: 'dental',
     recordedBy: 'منشی پذیرش',
     description: 'فاکتور شرکتی تجهیزات طب سنا',
@@ -604,7 +1440,7 @@ export const initialExpenses: ClinicExpense[] = [
     title: 'خرید کوکتل مزوتراپی و ژل‌های هیالورونیک زیبایی',
     category: 'consumables',
     amount: 14200000,
-    date: '۱۴۰۵-۰۶-۱۲',
+    date: d_m4,
     practice: 'aesthetic',
     recordedBy: 'منشی پذیرش',
     description: 'خرید از شرکت واردکننده تجهیزات زیبایی',
@@ -615,7 +1451,7 @@ export const initialExpenses: ClinicExpense[] = [
     title: 'شارژ اینترنت و قبوض نگهداری کلینیک',
     category: 'utilities',
     amount: 1800000,
-    date: '۱۴۰۵-۰۶-۱۰',
+    date: d_m6,
     practice: 'unified',
     recordedBy: 'منشی پذیرش',
     description: 'شارژ ماهانه ساختمان و اینترنت پرسرعت کلینیک',

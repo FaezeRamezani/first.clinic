@@ -1,6 +1,6 @@
 import React from 'react';
 import { CalendarDays, Globe, CalendarX } from 'lucide-react';
-import { TimeBlockGrid } from './TimeBlockGrid';
+import { TimeBlockGrid } from './TimeBlockGrid.tsx';
 import { OnlineRequestsTab } from './OnlineRequestsTab';
 import { CanceledWithoutReplacementTab } from './CanceledWithoutReplacementTab';
 import { useClinic } from '../../context/ClinicContext';

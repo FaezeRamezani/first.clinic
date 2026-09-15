@@ -1,7 +1,7 @@
 import React from 'react';
-import { MORNING_SLOTS, EVENING_SLOTS } from '../../utils/timeUtils';
-import { toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
-import { Sun, Moon } from 'lucide-react';
+import { useClinic } from '../../context/ClinicContext';
+import { toFarsiDigits, toEnglishDigits, getJalaliDayOfWeekName } from '../../utils/persianUtils';
+import { Clock, AlertCircle } from 'lucide-react';
 import type { Appointment } from '../../types';
 
 interface TimeSlotPickerProps {
@@ -14,6 +14,24 @@ interface TimeSlotPickerProps {
   label?: string;
 }
 
+const generateSessionSlots = (startStr: string, endStr: string, intervalMinutes: number = 30): string[] => {
+  const slots: string[] = [];
+  const [startH, startM] = startStr.split(':').map(Number);
+  const [endH, endM] = endStr.split(':').map(Number);
+
+  let currentMins = startH * 60 + startM;
+  const endMins = endH * 60 + endM;
+
+  while (currentMins <= endMins) {
+    const hours = Math.floor(currentMins / 60);
+    const mins = currentMins % 60;
+    const formatted = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+    slots.push(formatted);
+    currentMins += intervalMinutes;
+  }
+  return slots;
+};
+
 export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   value,
   onChange,
@@ -23,10 +41,15 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   excludeAppointmentId,
   label = 'ساعت نوبت (بازه مجاز):'
 }) => {
+  const { doctors, globalShifts } = useClinic();
   const normDate = toEnglishDigits(date).trim().replace(/\//g, '-');
   const normValue = toEnglishDigits(value).trim();
 
-  // Find occupied slots for specified doctor and date (excluding canceled appointments or current appt being rescheduled)
+  const doctor = doctors.find(d => d.id === doctorId);
+  const dayName = getJalaliDayOfWeekName(date);
+  const daySchedule = doctor?.weeklySchedule?.find(d => d.day === dayName);
+
+  // Find occupied slots for specified doctor and date
   const isSlotOccupied = (slotStr: string) => {
     const normSlot = toEnglishDigits(slotStr).trim();
     return appointments.some(apt => {
@@ -68,6 +91,24 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
     );
   };
 
+  const isOffDay = !daySchedule || (!daySchedule.morningActive && !daySchedule.eveningActive);
+
+  const activeShifts: { label: string; startTime: string; endTime: string }[] = [];
+  if (daySchedule?.morningActive && globalShifts?.morning) {
+    activeShifts.push({
+      label: 'شیفت صبح',
+      startTime: globalShifts.morning.startTime,
+      endTime: globalShifts.morning.endTime
+    });
+  }
+  if (daySchedule?.eveningActive && globalShifts?.evening) {
+    activeShifts.push({
+      label: 'شیفت عصر / شب',
+      startTime: globalShifts.evening.startTime,
+      endTime: globalShifts.evening.endTime
+    });
+  }
+
   return (
     <div className="space-y-2">
       {label && (
@@ -81,23 +122,27 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
         </div>
       )}
 
-      {/* Morning Shift */}
-      <div className="space-y-1 bg-amber-50/40 border border-amber-100 p-2 rounded-2xl">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 mb-1">
-          <Sun className="w-3.5 h-3.5 text-amber-600" />
-          <span>شیفت صبح (۰۹:۰۰ تا ۱۳:۰۰)</span>
+      {isOffDay ? (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>پزشک در روز «{dayName}» برنامه کاری فعال ندارد (تعطیل است).</span>
         </div>
-        {renderSlotButtons(MORNING_SLOTS)}
-      </div>
-
-      {/* Evening Shift */}
-      <div className="space-y-1 bg-indigo-50/40 border border-indigo-100 p-2 rounded-2xl">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-800 mb-1">
-          <Moon className="w-3.5 h-3.5 text-indigo-600" />
-          <span>شیفت عصر (۱۷:۰۰ تا ۲۰:۳۰)</span>
+      ) : (
+        <div className="space-y-2">
+          {activeShifts.map((shift, idx) => {
+            const slots = generateSessionSlots(shift.startTime, shift.endTime, 30);
+            return (
+              <div key={idx} className="space-y-1 bg-indigo-50/40 border border-indigo-100 p-2.5 rounded-2xl">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-900 mb-1">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{shift.label} ({toFarsiDigits(shift.startTime)} تا {toFarsiDigits(shift.endTime)})</span>
+                </div>
+                {renderSlotButtons(slots)}
+              </div>
+            );
+          })}
         </div>
-        {renderSlotButtons(EVENING_SLOTS)}
-      </div>
+      )}
     </div>
   );
 };

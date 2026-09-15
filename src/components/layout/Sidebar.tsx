@@ -2,7 +2,6 @@ import React from 'react';
 import {
   LayoutDashboard,
   CalendarDays,
-  BellRing,
   Users,
   Wallet,
   Tag,
@@ -15,6 +14,7 @@ import {
   Plus
 } from 'lucide-react';
 import { useClinic } from '../../context/ClinicContext';
+import { toFarsiDigits } from '../../utils/persianUtils';
 
 export const Sidebar: React.FC = () => {
   const {
@@ -22,36 +22,25 @@ export const Sidebar: React.FC = () => {
     setActiveView,
     scope,
     onlineRequests,
-    followUps,
-    appointments,
     openNewAppointment
   } = useClinic();
 
   // Calculate badge counts
   const pendingRequestsCount = onlineRequests.filter(r => r.status === 'pending').length;
-  const pendingFollowUpsCount = followUps.filter(f => f.status === 'pending').length;
-  const unsettledAppointmentsCount = appointments.filter(a => a.status === 'unsettled').length;
 
   const navItems = [
     {
       id: 'dashboard',
-      label: 'داشبورد و کنترل عملیاتی',
+      label: 'صفحه اصلی',
       icon: LayoutDashboard,
       badge: null
     },
     {
       id: 'appointments',
-      label: 'مدیریت و تقویم نوبت‌ها',
+      label: 'نوبت‌دهی',
       icon: CalendarDays,
-      badge: pendingRequestsCount > 0 ? `${pendingRequestsCount} درخواست` : null,
+      badge: pendingRequestsCount > 0 ? `${toFarsiDigits(pendingRequestsCount)} درخواست` : null,
       badgeColor: 'bg-amber-100 text-amber-800'
-    },
-    {
-      id: 'reminders',
-      label: 'یادآورها و پیگیری روزانه',
-      icon: BellRing,
-      badge: (pendingFollowUpsCount + unsettledAppointmentsCount) > 0 ? `${pendingFollowUpsCount + unsettledAppointmentsCount}` : null,
-      badgeColor: 'bg-rose-100 text-rose-800 font-bold'
     },
     {
       id: 'patients',

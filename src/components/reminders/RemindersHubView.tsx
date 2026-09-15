@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useClinic } from '../../context/ClinicContext';
-import { formatCurrency, toFarsiDigits } from '../../utils/persianUtils';
+import { useClinic, getPatientFileNumberDisplay } from '../../context/ClinicContext';
+import { formatCurrency, toFarsiDigits, getTodayJalaliDate, toEnglishDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
 import { 
   Users, 
   AlertCircle, 
@@ -14,6 +14,7 @@ export const RemindersHubView: React.FC = () => {
     scope, 
     appointments, 
     patients, 
+    transactions,
     followUps, 
     remindersTab,
     setRemindersTab,
@@ -33,7 +34,11 @@ export const RemindersHubView: React.FC = () => {
   const filteredFollowUps = followUps.filter(f => scope === 'unified' || f.practice === scope);
 
   // Tab 1: Today Visits
-  const todayVisits = filteredAppointments.filter(a => a.date === '۱۴۰۵-۰۶-۱۶');
+  const todayVisits = filteredAppointments.filter(a => {
+    const normA = toEnglishDigits(a.date).trim().replace(/\//g, '-');
+    const normToday = toEnglishDigits(getTodayJalaliDate()).trim().replace(/\//g, '-');
+    return normA === normToday;
+  });
   
   // Tab 2: Overdue Debts (Patients with balance < 0)
   const overdueDebtors = filteredPatients.filter(p => p.balance < 0);
@@ -45,10 +50,10 @@ export const RemindersHubView: React.FC = () => {
   const secretaryFollowUps = filteredFollowUps;
 
   // Global search filtering inside tabs
-  const matchSearch = (name: string, mobile: string, fileNo: string) => {
+  const matchSearch = (name: string, mobile: string, fileNo?: string) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return name.toLowerCase().includes(q) || mobile.includes(q) || fileNo.toLowerCase().includes(q);
+    return name.toLowerCase().includes(q) || mobile.includes(q) || (fileNo || '').toLowerCase().includes(q);
   };
 
   return (
@@ -175,7 +180,12 @@ export const RemindersHubView: React.FC = () => {
                   .map(apt => (
                     <tr key={apt.id} className="hover:bg-slate-50/80">
                       <td className="py-3.5 px-4 font-bold text-slate-900 dir-ltr text-right">{toFarsiDigits(apt.timeSlot)}</td>
-                      <td className="py-3.5 px-4 font-bold text-indigo-600">{toFarsiDigits(apt.fileNumber)}</td>
+                      <td className="py-3.5 px-4 font-bold text-indigo-600">
+                        {(() => {
+                          const patObj = patients.find(p => p.id === apt.patientId);
+                          return patObj ? getPatientFileNumberDisplay(patObj, apt.practice) : toFarsiDigits(apt.fileNumber);
+                        })()}
+                      </td>
                       <td className="py-3.5 px-4 font-bold text-slate-800">
                         <button
                           onClick={() => openPatientProfile(apt.patientId)}
@@ -225,7 +235,7 @@ export const RemindersHubView: React.FC = () => {
                   .filter(p => matchSearch(p.name, p.mobile, p.fileNumber))
                   .map(pat => (
                     <tr key={pat.id} className="hover:bg-rose-50/40">
-                      <td className="py-3.5 px-4 font-bold text-indigo-600">{toFarsiDigits(pat.fileNumber)}</td>
+                      <td className="py-3.5 px-4 font-bold text-indigo-600">{getPatientFileNumberDisplay(pat, pat.primaryPractice)}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <button
                           onClick={() => openPatientProfile(pat)}
@@ -243,7 +253,10 @@ export const RemindersHubView: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <button
-                          onClick={() => openPaymentCollection(pat)}
+                          onClick={() => {
+                            const targetTrx = transactions.find(t => t.patientId === pat.id && t.remainingDebt > 0);
+                            openPaymentCollection(pat, targetTrx || null, targetTrx?.practice || pat.primaryPractice);
+                          }}
                           className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs transition-colors"
                         >
                           ثبت دریافت وجه / تسویه
@@ -275,7 +288,7 @@ export const RemindersHubView: React.FC = () => {
                   .filter(a => matchSearch(a.patientName, a.patientMobile, a.fileNumber))
                   .map(apt => (
                     <tr key={apt.id} className="hover:bg-amber-50/40">
-                      <td className="py-3.5 px-4 text-amber-900 font-bold">{apt.date}</td>
+                      <td className="py-3.5 px-4 text-amber-900 font-bold">{toFarsiDigits(apt.date)}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <button
                           onClick={() => openPatientProfile(apt.patientId)}
@@ -322,7 +335,7 @@ export const RemindersHubView: React.FC = () => {
                   .filter(f => matchSearch(f.patientName, f.patientMobile, f.fileNumber))
                   .map(task => (
                     <tr key={task.id} className="hover:bg-slate-50/80">
-                      <td className="py-3.5 px-4 font-bold text-slate-800">{task.dueDate}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-800">{formatJalaliDateDisplay(task.dueDate)}</td>
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <button
                           onClick={() => openPatientProfile(task.patientId)}

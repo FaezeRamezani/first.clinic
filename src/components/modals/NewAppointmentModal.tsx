@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useClinic } from '../../context/ClinicContext';
+import { useClinic, getPhysicalFileNumber } from '../../context/ClinicContext';
 import { X, UserPlus, Search, UserCheck, Calendar, Check, Stethoscope, Sparkles, RefreshCw } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
@@ -17,6 +17,7 @@ export const NewAppointmentModal: React.FC = () => {
     doctors, 
     services, 
     addAppointment,
+    addPatient,
     selectedPatient,
     checkAppointmentConflict,
     appointments
@@ -112,7 +113,9 @@ export const NewAppointmentModal: React.FC = () => {
     const term = toEnglishDigits(patientSearchTerm).toLowerCase().trim();
     const nameMatch = p.name.toLowerCase().includes(term);
     const mobileMatch = toEnglishDigits(p.mobile).includes(term);
-    const fileMatch = toEnglishDigits(p.fileNumber).toLowerCase().includes(term);
+    const fileMatch = (p.fileNumber && toEnglishDigits(p.fileNumber).toLowerCase().includes(term)) ||
+                      getPhysicalFileNumber(p, 'dental').includes(term) ||
+                      getPhysicalFileNumber(p, 'aesthetic').includes(term);
     return nameMatch || mobileMatch || fileMatch;
   }).slice(0, 6);
 
@@ -140,6 +143,12 @@ export const NewAppointmentModal: React.FC = () => {
   const handleProceedWithNewPatient = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPatientName.trim()) return;
+
+    // Check if patient with same mobile already exists to prevent duplicate creation!
+    const existingPat = patients.find(p => p.mobile === newPatientMobile.trim());
+    if (existingPat) {
+      setChosenPatient(existingPat);
+    }
     setStep('details');
   };
 
@@ -156,15 +165,41 @@ export const NewAppointmentModal: React.FC = () => {
       return;
     }
 
-    let patName = chosenPatient?.name || newPatientName;
-    let patMobile = chosenPatient?.mobile || newPatientMobile || '۰۹۱۲۰۰۰۰۰۰۰';
-    let fileNum = chosenPatient?.fileNumber || `CL-${1000 + patients.length + 1}`;
-    let patId = chosenPatient?.id || `pat-${Date.now()}`;
-
-    if (!patName) return;
-
     const doc = doctors.find(d => d.id === doctorId) || doctors[0];
     const srv = services.find(s => s.id === serviceId);
+
+    let patId = chosenPatient ? chosenPatient.id : '';
+    let patName = chosenPatient ? chosenPatient.name : newPatientName;
+    let patMobile = chosenPatient ? chosenPatient.mobile : (newPatientMobile || '۰۹۱۲۰۰۰۰۰۰۰');
+
+    // Check once again if new patient mobile matches existing patient to avoid duplicates
+    if (!chosenPatient && newPatientMobile) {
+      const existing = patients.find(p => p.mobile === newPatientMobile.trim());
+      if (existing) {
+        patId = existing.id;
+        patName = existing.name;
+        patMobile = existing.mobile;
+      }
+    }
+
+    // If still no patient ID (genuinely brand new patient), create new patient record
+    if (!patId) {
+      const newPatId = `pat-${Date.now()}`;
+      patId = newPatId;
+      addPatient({
+        name: patName,
+        mobile: patMobile,
+        nationalId: '۰۰۰۰۰۰۰۰۰۰',
+        primaryPractice: doc.practice,
+        memberships: [{ practice: doc.practice, physicalFileNumber: String(100 + patients.length + 1), joinedAt: getTodayJalaliDate() }],
+        allergies: [],
+        medicalNotes: '',
+        emergencyContact: { name: '-', phone: '-', relation: '-' }
+      });
+    }
+
+    const targetPatientObj = patients.find(p => p.id === patId);
+    const fileNum = targetPatientObj ? (getPhysicalFileNumber(targetPatientObj, doc.practice) || targetPatientObj.fileNumber || '') : '';
 
     // FINAL COMMIT happens here on submit!
     addAppointment({
@@ -190,7 +225,7 @@ export const NewAppointmentModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
