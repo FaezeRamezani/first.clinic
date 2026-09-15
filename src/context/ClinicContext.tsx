@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type {
   ClinicScope,
   PracticeType,
-  PracticeMembership,
   UserRole,
   Doctor,
   ServiceItem,
@@ -19,19 +18,13 @@ import type {
   PaymentAccount,
   GlobalShiftsConfig
 } from '../types';
-import {
-  initialDoctors,
-  initialServices,
-  initialPatients,
-  initialAppointments,
-  initialOnlineRequests,
-  initialTransactions,
-  initialFollowUps,
-  initialExpenses,
-  initialPaymentAccounts,
-  initialGlobalShifts
-} from '../data/mockData';
 import { getTodayJalaliDate, getJalaliDateOffset, toEnglishDigits, toFarsiDigits } from '../utils/persianUtils';
+import { settingsApi, doctorsApi, servicesApi, paymentAccountsApi, patientsApi, appointmentsApi, financeApi, followUpsApi, onlineRequestsApi } from '../services/api';
+
+const DEFAULT_GLOBAL_SHIFTS: GlobalShiftsConfig = {
+  morning: { startTime: '09:00', endTime: '14:00' },
+  evening: { startTime: '16:00', endTime: '21:00' }
+};
 
 export const PRACTICE_PAYMENT_ACCOUNTS = {
   aesthetic: [
@@ -188,11 +181,12 @@ interface ClinicContextType {
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => void;
   updateAppointmentPresenceStatus: (id: string, presenceStatus: PresenceStatus) => void;
   checkAppointmentConflict: (date: string, timeSlot: string, doctorId: string, excludeApptId?: string) => boolean;
-  approveOnlineRequest: (id: string, confirmedDate?: string, timeSlot?: string, doctorId?: string, customMessage?: string) => boolean;
-  rejectOnlineRequest: (id: string, reason: string) => void;
+  approveOnlineRequest: (id: string, confirmedDate?: string, timeSlot?: string, doctorId?: string, customMessage?: string) => boolean | Promise<boolean>;
+  rejectOnlineRequest: (id: string, reason: string) => void | Promise<void>;
   recordCheckout: (trxData: Omit<FinancialTransaction, 'id'>) => void;
-  collectPayment: (patientId: string, amount: number, posAccount: string, practice: 'aesthetic' | 'dental', transactionId?: string, debtDueDate?: string, notes?: string, customRecordDate?: string) => boolean;
-  updateFollowUp: (id: string, status: FollowUpStatus, resultNote: string) => void;
+  collectPayment: (patientId: string, amount: number, posAccount: string, practice: 'aesthetic' | 'dental', transactionId?: string, debtDueDate?: string, notes?: string, customRecordDate?: string) => boolean | Promise<boolean>;
+  updateFollowUp: (id: string, status: FollowUpStatus, resultNote: string) => void | Promise<void>;
+  createTask: (taskData: Omit<FollowUpTask, 'id'> & { title?: string }) => void | Promise<void>;
   paymentAccounts: PaymentAccount[];
   globalShifts: GlobalShiftsConfig;
   updateGlobalShifts: (shifts: GlobalShiftsConfig) => void;
@@ -227,16 +221,16 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [appointmentsTab, setAppointmentsTab] = useState<'schedule' | 'online_requests' | 'canceled_no_replacement'>('schedule');
   const [userRole, setUserRole] = useState<UserRole>('receptionist');
 
-  const [doctors, setDoctors] = useState<Doctor[]>(initialDoctors);
-  const [globalShifts, setGlobalShifts] = useState<GlobalShiftsConfig>(initialGlobalShifts);
-  const [services, setServices] = useState<ServiceItem[]>(initialServices);
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>(initialPaymentAccounts);
-  const [patients, setPatients] = useState<Patient[]>(initialPatients);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
-  const [onlineRequests, setOnlineRequests] = useState<OnlineRequest[]>(initialOnlineRequests);
-  const [transactions, setTransactions] = useState<FinancialTransaction[]>(initialTransactions);
-  const [followUps, setFollowUps] = useState<FollowUpTask[]>(initialFollowUps);
-  const [expenses, setExpenses] = useState<ClinicExpense[]>(initialExpenses);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [globalShifts, setGlobalShifts] = useState<GlobalShiftsConfig>(DEFAULT_GLOBAL_SHIFTS);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [onlineRequests, setOnlineRequests] = useState<OnlineRequest[]>([]);
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUpTask[]>([]);
+  const [expenses, setExpenses] = useState<ClinicExpense[]>([]);
 
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
@@ -266,6 +260,49 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Dashboard specific date state
   const [dashboardDate, setDashboardDate] = useState<string>(getTodayJalaliDate());
+
+  // Phase 2-7: Initial Fetch for Persistent Backend Domain Data
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadBackendData = async () => {
+      try {
+        const [shiftsData, docsData, srvsData, accsData, patsData, aptsData, trxsData, expsData, tasksData, reqsData] = await Promise.all([
+          settingsApi.getGlobalShifts().catch(() => null),
+          doctorsApi.getDoctors().catch(() => null),
+          servicesApi.getServices().catch(() => null),
+          paymentAccountsApi.getPaymentAccounts().catch(() => null),
+          patientsApi.getPatients().catch(() => null),
+          appointmentsApi.getAppointments().catch(() => null),
+          financeApi.getTransactions().catch(() => null),
+          financeApi.getExpenses().catch(() => null),
+          followUpsApi.getTasks().catch(() => null),
+          onlineRequestsApi.getRequests().catch(() => null)
+        ]);
+
+        if (!isMounted) return;
+
+        if (shiftsData) setGlobalShifts(shiftsData);
+        if (Array.isArray(docsData)) setDoctors(docsData);
+        if (Array.isArray(srvsData)) setServices(srvsData);
+        if (Array.isArray(accsData)) setPaymentAccounts(accsData);
+        if (Array.isArray(patsData)) setPatients(patsData);
+        if (Array.isArray(aptsData)) setAppointments(aptsData);
+        if (Array.isArray(trxsData)) setTransactions(trxsData);
+        if (Array.isArray(expsData)) setExpenses(expsData);
+        if (Array.isArray(tasksData)) setFollowUps(tasksData);
+        if (Array.isArray(reqsData)) setOnlineRequests(reqsData);
+      } catch (err) {
+        console.error('Failed to load initial Phase 6 backend data:', err);
+      }
+    };
+
+    loadBackendData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const openNewAppointment = (prefill?: NewAppointmentPrefillData) => {
     setNewAppointmentPrefill(prefill || null);
@@ -320,340 +357,191 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  const ensurePatientMembership = (patientId: string, practice: 'aesthetic' | 'dental', customFileNumber?: string) => {
-    setPatients(prev => prev.map(p => {
-      if (p.id !== patientId) return p;
-
-      const existingMemberships = p.memberships || [];
-      if (existingMemberships.some(m => m.practice === practice)) return p;
-
-      let maxNum = 100;
-      prev.forEach(item => {
-        const numStr = getPhysicalFileNumber(item, practice);
-        if (numStr) {
-          const parsed = parseInt(numStr.replace(/\D/g, ''), 10);
-          if (!isNaN(parsed) && parsed > maxNum) maxNum = parsed;
-        }
-      });
-      const fileNumToAssign = customFileNumber || String(maxNum + 1);
-
-      return {
-        ...p,
-        memberships: [
-          ...existingMemberships,
-          { practice, physicalFileNumber: fileNumToAssign, joinedAt: getTodayJalaliDate() }
-        ]
-      };
-    }));
-
-    if (selectedPatient?.id === patientId) {
-      setSelectedPatient(prev => {
-        if (!prev) return null;
-        if (prev.memberships?.some(m => m.practice === practice)) return prev;
-        let maxNum = 100;
-        patients.forEach(item => {
-          const numStr = getPhysicalFileNumber(item, practice);
-          if (numStr) {
-            const parsed = parseInt(numStr.replace(/\D/g, ''), 10);
-            if (!isNaN(parsed) && parsed > maxNum) maxNum = parsed;
-          }
-        });
-        const fileNumToAssign = customFileNumber || String(maxNum + 1);
-        return {
-          ...prev,
-          memberships: [
-            ...(prev.memberships || []),
-            { practice, physicalFileNumber: fileNumToAssign, joinedAt: getTodayJalaliDate() }
-          ]
-        };
-      });
+  const ensurePatientMembership = async (patientId: string, practice: 'aesthetic' | 'dental', customFileNumber?: string) => {
+    try {
+      const updated = await patientsApi.addPatientMembership(patientId, practice, customFileNumber);
+      setPatients(prev => prev.map(p => p.id === patientId ? updated : p));
+      if (selectedPatient?.id === patientId) {
+        setSelectedPatient(updated);
+      }
+    } catch (err: any) {
+      console.error('Failed to ensure patient membership:', err);
+      alert(err.message || 'خطا در ثبت عضویت مطب بیمار');
     }
   };
 
-  const updatePhysicalFileNumber = (patientId: string, practice: 'aesthetic' | 'dental', newFileNumber: string) => {
-    setPatients(prev => prev.map(p => {
-      if (p.id !== patientId) return p;
-      const existingMemberships = p.memberships || [];
-      const hasItem = existingMemberships.some(m => m.practice === practice);
-      let updated: PracticeMembership[];
-      if (hasItem) {
-        updated = existingMemberships.map(m => m.practice === practice ? { ...m, physicalFileNumber: newFileNumber } : m);
-      } else {
-        updated = [...existingMemberships, { practice, physicalFileNumber: newFileNumber, joinedAt: getTodayJalaliDate() }];
+  const updatePhysicalFileNumber = async (patientId: string, practice: 'aesthetic' | 'dental', newFileNumber: string) => {
+    try {
+      const updated = await patientsApi.updatePhysicalFileNumber(patientId, practice, newFileNumber);
+      setPatients(prev => prev.map(p => p.id === patientId ? updated : p));
+      if (selectedPatient?.id === patientId) {
+        setSelectedPatient(updated);
       }
-      return { ...p, memberships: updated };
-    }));
-
-    if (selectedPatient?.id === patientId) {
-      setSelectedPatient(prev => {
-        if (!prev) return null;
-        const existingMemberships = prev.memberships || [];
-        const hasItem = existingMemberships.some(m => m.practice === practice);
-        let updated: PracticeMembership[];
-        if (hasItem) {
-          updated = existingMemberships.map(m => m.practice === practice ? { ...m, physicalFileNumber: newFileNumber } : m);
-        } else {
-          updated = [...existingMemberships, { practice, physicalFileNumber: newFileNumber, joinedAt: getTodayJalaliDate() }];
-        }
-        return { ...prev, memberships: updated };
-      });
+    } catch (err: any) {
+      console.error('Failed to update physical file number:', err);
+      alert(err.message || 'خطا در تغییر شماره پرونده فیزیکی');
     }
   };
 
-  const addAppointment = (aptData: Omit<Appointment, 'id'>) => {
-    if (aptData.patientId) {
-      ensurePatientMembership(aptData.patientId, aptData.practice);
+  const addAppointment = async (aptData: Omit<Appointment, 'id'>) => {
+    try {
+      if (aptData.patientId) {
+        await ensurePatientMembership(aptData.patientId, aptData.practice);
+      }
+      await appointmentsApi.createAppointment(aptData);
+      const [freshApts, freshPats] = await Promise.all([
+        appointmentsApi.getAppointments(),
+        patientsApi.getPatients()
+      ]);
+      setAppointments(freshApts);
+      setPatients(freshPats);
+    } catch (err: any) {
+      console.error('Failed to add appointment:', err);
+      alert(err.message || 'خطا در ثبت نوبت جدید');
     }
-    const newAptId = `apt-${Date.now()}`;
-    const newApt: Appointment = {
-      ...aptData,
-      id: newAptId
-    };
-    setAppointments(prev => {
-      const updated = prev.map(a => {
-        // Link replacement ID on previous appointment and set status to rescheduled atomically
-        if (aptData.previousAppointmentId && a.id === aptData.previousAppointmentId) {
-          return {
-            ...a,
-            status: 'rescheduled' as const,
-            cancellationType: 'rescheduled' as const,
-            cancellationReason: a.cancellationReason || 'تغییر نوبت و تعیین زمان جدید',
-            canceledAt: getTodayJalaliDate(),
-            replacementAppointmentId: newAptId
-          };
-        }
-        // Also update any pending canceled appointment for same patient if applicable
-        if (a.patientId === aptData.patientId && a.status === 'canceled' && a.cancellationType === 'no_replacement') {
-          return {
-            ...a,
-            cancellationType: 'rescheduled' as const,
-            replacementAppointmentId: newAptId
-          };
-        }
-        return a;
+  };
+
+  const cancelAppointment = async (id: string, type: 'rescheduled' | 'no_replacement', reason?: string) => {
+    try {
+      await appointmentsApi.cancelAppointment(id, type, reason);
+      const freshApts = await appointmentsApi.getAppointments();
+      setAppointments(freshApts);
+    } catch (err: any) {
+      console.error('Failed to cancel appointment:', err);
+      alert(err.message || 'خطا در لغو نوبت');
+    }
+  };
+
+  const updateAppointmentStatus = async (id: string, status: AppointmentStatus) => {
+    try {
+      await appointmentsApi.updateAppointmentStatus(id, status);
+      const freshApts = await appointmentsApi.getAppointments();
+      setAppointments(freshApts);
+    } catch (err: any) {
+      console.error('Failed to update appointment status:', err);
+      alert(err.message || 'خطا در تغییر وضعیت نوبت');
+    }
+  };
+
+  const updateAppointmentPresenceStatus = async (id: string, presenceStatus: PresenceStatus) => {
+    try {
+      const targetApt = appointments.find(a => a.id === id);
+      await appointmentsApi.updateAppointmentPresenceStatus(id, presenceStatus, targetApt?.status);
+      const freshApts = await appointmentsApi.getAppointments();
+      setAppointments(freshApts);
+    } catch (err: any) {
+      console.error('Failed to update presence status:', err);
+      alert(err.message || 'خطا در تغییر وضعیت حضور بیمار');
+    }
+  };
+
+  const approveOnlineRequest = async (
+    id: string,
+    confirmedDate?: string,
+    timeSlot?: string,
+    doctorId?: string,
+    customMessage?: string
+  ): Promise<boolean> => {
+    try {
+      await onlineRequestsApi.approveRequest(id, {
+        confirmedDate,
+        timeSlot,
+        doctorId,
+        customMessage
       });
-      return [newApt, ...updated];
-    });
-  };
 
-  const cancelAppointment = (id: string, type: 'rescheduled' | 'no_replacement', reason?: string) => {
-    setAppointments(prev => prev.map(apt => {
-      if (apt.id === id) {
-        // Prevent modifying completed/settled appointments
-        if (apt.status === 'completed') return apt;
+      const [freshReqs, freshApts, freshPats] = await Promise.all([
+        onlineRequestsApi.getRequests(),
+        appointmentsApi.getAppointments(),
+        patientsApi.getPatients()
+      ]);
 
-        const newStatus: AppointmentStatus = type === 'rescheduled' ? 'rescheduled' : 'canceled';
-        return {
-          ...apt,
-          status: newStatus,
-          cancellationType: type,
-          cancellationReason: reason || (type === 'no_replacement' ? 'لغو شده - بدون نوبت جایگزین' : 'تغییر نوبت و تعیین زمان جدید'),
-          canceledAt: getTodayJalaliDate()
-        };
-      }
-      return apt;
-    }));
-  };
-
-  const updateAppointmentStatus = (id: string, status: AppointmentStatus) => {
-    setAppointments(prev => prev.map(apt => {
-      // Completed, canceled, or rescheduled appointments cannot have status changed
-      if (apt.id === id && apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled') {
-        return { ...apt, status };
-      }
-      return apt;
-    }));
-  };
-
-  const updateAppointmentPresenceStatus = (id: string, presenceStatus: PresenceStatus) => {
-    setAppointments(prev => prev.map(apt => {
-      // Completed, canceled, or rescheduled appointments cannot have presence changed
-      if (apt.id === id && apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled') {
-        const updatedStatus = presenceStatus === 'present' ? 'checked_in' : (apt.status === 'checked_in' ? 'pending' : apt.status);
-        return { ...apt, presenceStatus, status: updatedStatus };
-      }
-      return apt;
-    }));
-  };
-
-  const approveOnlineRequest = (id: string, confirmedDate?: string, timeSlot?: string, doctorId?: string, customMessage?: string): boolean => {
-    const req = onlineRequests.find(r => r.id === id);
-    if (!req) return false;
-
-    const targetDocId = doctorId || req.doctorId;
-    const targetDate = confirmedDate || req.requestedDate;
-    const targetSlot = timeSlot || req.requestedTimeSlot;
-    const docObj = doctors.find(d => d.id === targetDocId) || doctors[0];
-
-    // Conflict check
-    const hasConflict = checkAppointmentConflict(targetDate, targetSlot, targetDocId);
-    if (hasConflict) {
+      setOnlineRequests(freshReqs);
+      setAppointments(freshApts);
+      setPatients(freshPats);
+      return true;
+    } catch (err: any) {
+      console.error('Failed to approve online request:', err);
+      alert(err.message || 'خطا در تأیید درخواست آنلاین');
       return false;
     }
+  };
 
-    // Update request status
-    setOnlineRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'approved' } : r));
-
-    // Find or create matching patient
-    let patient = patients.find(p => p.mobile === req.mobile);
-    let patientId = patient?.id;
-    let fileNum = patient?.fileNumber || `CL-${1000 + patients.length + 1}`;
-
-    if (!patient) {
-      const newPat: Patient = {
-        id: `pat-${Date.now()}`,
-        fileNumber: fileNum,
-        memberships: [{ practice: req.targetPractice, physicalFileNumber: fileNum, joinedAt: getTodayJalaliDate() }],
-        nationalId: req.nationalId || '۰۰۰۰۰۰۰۰۰۰',
-        name: req.patientName,
-        mobile: req.mobile,
-        gender: 'female',
-        primaryPractice: req.targetPractice,
-        allergies: [],
-        medicalNotes: req.notes || '',
-        emergencyContact: { name: '-', phone: '-', relation: '-' },
-        balance: 0,
-        createdAt: getTodayJalaliDate()
-      };
-      setPatients(prev => [newPat, ...prev]);
-      patientId = newPat.id;
+  const rejectOnlineRequest = async (id: string, reason: string) => {
+    try {
+      await onlineRequestsApi.rejectRequest(id, reason);
+      const freshReqs = await onlineRequestsApi.getRequests();
+      setOnlineRequests(freshReqs);
+    } catch (err: any) {
+      console.error('Failed to reject online request:', err);
+      alert(err.message || 'خطا در رد درخواست آنلاین');
     }
-
-    // Add to appointments schedule
-    const newApt: Appointment = {
-      id: `apt-${Date.now()}`,
-      patientId: patientId || `pat-${Date.now()}`,
-      patientName: req.patientName,
-      patientMobile: req.mobile,
-      fileNumber: fileNum,
-      doctorId: targetDocId,
-      doctorName: docObj.name,
-      practice: req.targetPractice,
-      date: targetDate,
-      timeSlot: targetSlot,
-      duration: 30,
-      status: 'pending',
-      notes: customMessage || `نوبت تأییدشده از پورتال آنلاین: ${req.notes || ''}`
-    };
-    setAppointments(prev => [newApt, ...prev]);
-    return true;
   };
 
-  const rejectOnlineRequest = (id: string, reason: string) => {
-    setOnlineRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'rejected', rejectionReason: reason, rejectedAt: getTodayJalaliDate() } : r));
-  };
+  const recordCheckout = async (trxData: Omit<FinancialTransaction, 'id'>) => {
+    try {
+      let finalPatientId = trxData.patientId;
+      const existingPatient = patients.find(p => p.id === trxData.patientId || (p.mobile && p.mobile === trxData.patientName));
 
-  const getMaxFileNumber = (pts: Patient[]) => {
-    let maxNum = 1000;
-    pts.forEach(p => {
-      if (p.fileNumber) {
-        const match = p.fileNumber.match(/\d+/);
-        if (match) {
-          const num = parseInt(match[0], 10);
-          if (num > maxNum) maxNum = num;
+      if (!existingPatient && !patients.some(p => p.id === trxData.patientId)) {
+        const targetAppt = appointments.find(a => a.id === trxData.appointmentId);
+        const mobileToUse = targetAppt?.patientMobile || '۰۹۱۲۰۰۰۰۰۰۰';
+
+        const createdPt = await patientsApi.createPatient({
+          name: trxData.patientName,
+          mobile: mobileToUse,
+          primaryPractice: trxData.practice || 'aesthetic',
+          profileStatus: 'incomplete',
+          memberships: [{ practice: trxData.practice || 'aesthetic', physicalFileNumber: '' }]
+        });
+        finalPatientId = createdPt.id;
+        setCreatedIncompletePatientModal(createdPt);
+      } else if (existingPatient) {
+        finalPatientId = existingPatient.id;
+      }
+
+      let effectiveDueDate = trxData.debtDueDate;
+      if (trxData.remainingDebt > 0 && (!effectiveDueDate || !effectiveDueDate.trim())) {
+        const matchedService = services.find(s => s.name === trxData.serviceName || s.id === (trxData as any).serviceId);
+        if (matchedService?.defaultPaymentTermDays && matchedService.defaultPaymentTermDays > 0) {
+          const serviceDateToUse = trxData.serviceDate || trxData.date || getTodayJalaliDate();
+          effectiveDueDate = getJalaliDateOffset(serviceDateToUse, matchedService.defaultPaymentTermDays);
         }
       }
-    });
-    return maxNum;
-  };
 
-  const recordCheckout = (trxData: Omit<FinancialTransaction, 'id'>) => {
-    let finalPatientId = trxData.patientId;
-    let finalFileNumber: string = trxData.fileNumber || 'CL-1000';
-
-    const existingPatient = patients.find(p => p.id === trxData.patientId || (p.mobile && p.mobile === trxData.patientName));
-
-    if (!existingPatient && !patients.some(p => p.id === trxData.patientId)) {
-      const targetAppt = appointments.find(a => a.id === trxData.appointmentId);
-      const mobileToUse = targetAppt?.patientMobile || '۰۹۱۲۰۰۰۰۰۰۰';
-
-      const nextNum = getMaxFileNumber(patients) + 1;
-      finalFileNumber = `CL-${nextNum}`;
-      finalPatientId = `pat-${Date.now()}`;
-
-      const netBalance = trxData.remainingDebt > 0 ? -trxData.remainingDebt : (trxData.paidAmount - trxData.netCost);
-
-      const newPatient: Patient = {
-        id: finalPatientId,
-        fileNumber: finalFileNumber,
-        memberships: [{ practice: trxData.practice || 'aesthetic', physicalFileNumber: finalFileNumber, joinedAt: getTodayJalaliDate() }],
-        name: trxData.patientName,
-        mobile: mobileToUse,
-        primaryPractice: trxData.practice || 'aesthetic',
-        balance: netBalance,
-        createdAt: getTodayJalaliDate(),
-        profileStatus: 'incomplete',
-        allergies: [],
-        medicalNotes: '',
-        loginCredentials: {
-          username: mobileToUse,
-          password: `cl-${Math.floor(100000 + Math.random() * 900000)}`
-        }
-      };
-
-      setPatients(prev => [newPatient, ...prev]);
-
-      setAppointments(prev => prev.map(a =>
-        (a.id === trxData.appointmentId || a.patientId === trxData.patientId || (a.patientName === trxData.patientName && a.patientMobile === mobileToUse))
-          ? { ...a, patientId: finalPatientId, fileNumber: finalFileNumber, status: 'completed' }
-          : a
-      ));
-
-      setCreatedIncompletePatientModal(newPatient);
-    } else if (existingPatient) {
-      finalPatientId = existingPatient.id;
-      finalFileNumber = existingPatient.fileNumber || 'CL-1000';
-
-      const netChange = trxData.remainingDebt > 0 ? -trxData.remainingDebt : (trxData.paidAmount - trxData.netCost);
-      setPatients(prev => prev.map(p => p.id === existingPatient.id ? { ...p, balance: p.balance + netChange } : p));
-
-      if (trxData.appointmentId) {
-        setAppointments(prev => prev.map(apt => apt.id === trxData.appointmentId ? { ...apt, status: 'completed' } : apt));
-      }
-    } else if (trxData.appointmentId) {
-      setAppointments(prev => prev.map(apt => apt.id === trxData.appointmentId ? { ...apt, status: 'completed' } : apt));
-    }
-
-    let effectiveDueDate = trxData.debtDueDate;
-    if (trxData.remainingDebt > 0 && (!effectiveDueDate || !effectiveDueDate.trim())) {
-      const matchedService = services.find(s => s.name === trxData.serviceName || s.id === (trxData as any).serviceId);
-      if (matchedService?.defaultPaymentTermDays && matchedService.defaultPaymentTermDays > 0) {
-        const serviceDateToUse = trxData.serviceDate || trxData.date || getTodayJalaliDate();
-        effectiveDueDate = getJalaliDateOffset(serviceDateToUse, matchedService.defaultPaymentTermDays);
-      }
-    }
-
-    const newTrx: FinancialTransaction = {
-      ...trxData,
-      debtDueDate: effectiveDueDate,
-      id: `trx-${Date.now()}`,
-      patientId: finalPatientId,
-      fileNumber: finalFileNumber
-    };
-
-    setTransactions(prev => [newTrx, ...prev]);
-
-    // If remaining debt > 0, generate a reminder follow-up task
-    if (trxData.remainingDebt > 0 && trxData.debtDueDate) {
-      const newFollowUp: FollowUpTask = {
-        id: `flw-${Date.now()}`,
+      await financeApi.createObligation({
         patientId: finalPatientId,
-        patientName: trxData.patientName,
-        patientMobile: patients.find(p => p.id === finalPatientId)?.mobile || '',
-        fileNumber: finalFileNumber,
-        doctorId: initialDoctors.find(d => d.practice === trxData.practice)?.id || 'doc-1',
-        doctorName: initialDoctors.find(d => d.practice === trxData.practice)?.name || 'پزشک',
-        practice: trxData.practice,
-        type: 'debt_reminder',
-        description: `وصول اقساط/بدهی ${trxData.remainingDebt.toLocaleString('fa-IR')} تومانی بابت ${trxData.serviceName}`,
-        dueDate: trxData.debtDueDate,
-        status: 'pending'
-      };
-      setFollowUps(prev => [newFollowUp, ...prev]);
+        appointmentId: trxData.appointmentId,
+        serviceId: (trxData as any).serviceId,
+        practice: trxData.practice || 'aesthetic',
+        serviceDate: trxData.serviceDate || trxData.date || getTodayJalaliDate(),
+        recordDate: trxData.date || getTodayJalaliDate(),
+        serviceName: trxData.serviceName,
+        totalCost: trxData.totalCost || 0,
+        discount: trxData.discount || 0,
+        dueDate: effectiveDueDate,
+        notes: trxData.notes,
+        paidAmount: trxData.paidAmount || 0,
+        paymentMethod: trxData.paymentMethod,
+        posAccount: trxData.posAccount
+      });
+
+      const [freshTrxs, freshPats, freshApts] = await Promise.all([
+        financeApi.getTransactions(),
+        patientsApi.getPatients(),
+        appointmentsApi.getAppointments()
+      ]);
+
+      setTransactions(freshTrxs);
+      setPatients(freshPats);
+      setAppointments(freshApts);
+    } catch (err: any) {
+      console.error('Failed to record checkout:', err);
+      alert(err.message || 'خطا در ثبت تسویه مالی');
     }
   };
 
-  const collectPayment = (
+  const collectPayment = async (
     patientId: string,
     amount: number,
     posAccount: string,
@@ -662,199 +550,184 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     debtDueDate?: string,
     notes?: string,
     customRecordDate?: string
-  ): boolean => {
-    const patient = patients.find(p => p.id === patientId);
-    if (!patient || amount < 0) return false;
+  ): Promise<boolean> => {
+    try {
+      const patient = patients.find(p => p.id === patientId);
+      if (!patient || amount < 0) return false;
 
-    const safePosAccount = posAccount || '';
-    let method: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer' = 'cash';
-    if (safePosAccount.includes('نقد')) {
-      method = 'cash';
-    } else if (safePosAccount.includes('کارت به کارت')) {
-      method = 'card_transfer';
-    } else if (practice === 'aesthetic') {
-      method = 'pos_aesthetic';
-    } else {
-      method = 'pos_dental';
-    }
-
-    const todayStr = getTodayJalaliDate();
-    const recordDateToUse = (customRecordDate && customRecordDate.trim()) ? customRecordDate.trim() : todayStr;
-
-    // Identify target treatment obligation if available
-    const targetTrx = transactionId
-      ? transactions.find(t => t.id === transactionId)
-      : transactions.find(t => t.patientId === patientId && t.practice === practice && t.trxType !== 'payment' && (t.remainingDebt > 0 || t.lastActionDate === todayStr));
-
-    // Calculate current live remaining debt for obligation BEFORE this payment
-    let currentRemaining = 0;
-    if (targetTrx) {
-      const linkedPayments = transactions.filter(t => t.trxType === 'payment' && (t.obligationId === targetTrx.id || (t.appointmentId && t.appointmentId === targetTrx.appointmentId)));
-      const totalPaidSoFar = targetTrx.paidAmount + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
-      currentRemaining = Math.max(0, targetTrx.netCost - totalPaidSoFar);
-    } else if (patient.balance < 0) {
-      currentRemaining = Math.abs(patient.balance);
-    } else {
-      currentRemaining = 0;
-    }
-
-    const clampedPayment = Math.max(0, isNaN(amount) ? 0 : amount);
-    const remainingAfter = Math.max(0, currentRemaining - clampedPayment);
-
-    const now = new Date();
-    const timeStr = toFarsiDigits(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }));
-
-    const targetTrxName = targetTrx
-      ? (clampedPayment > 0 ? `دریافت/وصول بابت ${targetTrx.serviceName}` : `تعیین سررسید بابت ${targetTrx.serviceName}`)
-      : (clampedPayment > 0 ? 'وصول قسط / دریافت وجه بیمار' : 'تعیین سررسید بدهی بیمار');
-
-    // Create NEW INDEPENDENT TRANSACTION RECEIPT RECORD
-    const paymentTrx: FinancialTransaction = {
-      id: `trx-pay-${Date.now()}`,
-      patientId: patient.id,
-      patientName: patient.name,
-      fileNumber: getPhysicalFileNumber(patient, practice) || patient.fileNumber || 'CL-1000',
-      appointmentId: targetTrx?.appointmentId,
-      practice: practice,
-      date: recordDateToUse, // recordDate (independent)
-      serviceDate: targetTrx?.serviceDate || targetTrx?.date, // serviceDate (independent)
-      timestamp: timeStr,
-      serviceName: targetTrxName,
-      totalCost: 0,
-      discount: 0,
-      netCost: 0,
-      paidAmount: clampedPayment,
-      remainingDebt: remainingAfter,
-      paymentMethod: method,
-      posAccount: safePosAccount || (clampedPayment === 0 ? 'تعیین سررسید بدهی' : 'صندوق نقدی مطب'),
-      debtDueDate: remainingAfter > 0 ? debtDueDate : undefined, // dueDate (independent)
-      lastActionDate: recordDateToUse,
-      notes: notes || (clampedPayment > 0 ? 'ثبت دریافت وجه' : 'تعیین سررسید بدهی بدون دریافت وجه'),
-      trxType: 'payment',
-      obligationId: targetTrx?.id || `ob-${patient.id}`
-    };
-
-    // Prepend new payment record WITHOUT mutating past transactions (100% immutable historical records)
-    setTransactions(prev => [paymentTrx, ...prev]);
-
-    // Update Patient Account Balance & Sync Active Patient States
-    if (clampedPayment > 0) {
-      setPatients(prev => prev.map(p => p.id === patientId ? { ...p, balance: p.balance + clampedPayment } : p));
-      if (selectedPatient?.id === patientId) {
-        setSelectedPatient(prev => prev ? { ...prev, balance: prev.balance + clampedPayment } : null);
-      }
-      if (selectedPatientForPayment?.id === patientId) {
-        setSelectedPatientForPayment(prev => prev ? { ...prev, balance: prev.balance + clampedPayment } : null);
-      }
-    }
-
-    // Handle FollowUpTask if debt remains
-    const docObj = doctors.find(d => d.practice === practice) || doctors[0];
-    if (remainingAfter > 0 && debtDueDate) {
-      const existingFlw = followUps.find(f => f.patientId === patientId && f.practice === practice && f.status === 'pending');
-      if (existingFlw) {
-        setFollowUps(prev => prev.map(f => f.id === existingFlw.id ? { ...f, dueDate: debtDueDate } : f));
+      const safePosAccount = posAccount || '';
+      let method: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer' = 'cash';
+      if (safePosAccount.includes('نقد')) {
+        method = 'cash';
+      } else if (safePosAccount.includes('کارت به کارت')) {
+        method = 'card_transfer';
+      } else if (practice === 'aesthetic') {
+        method = 'pos_aesthetic';
       } else {
-        const newFlw: FollowUpTask = {
-          id: `flw-${Date.now()}`,
-          patientId: patient.id,
-          patientName: patient.name,
-          patientMobile: patient.mobile,
-          fileNumber: getPhysicalFileNumber(patient, practice) || patient.fileNumber || 'CL-1000',
-          doctorId: docObj?.id || 'doc-1',
-          doctorName: docObj?.name || 'پزشک',
-          practice: practice,
-          type: 'debt_reminder',
-          description: `پیگیری مانده بدهی ${remainingAfter.toLocaleString('fa-IR')} تومانی`,
-          dueDate: debtDueDate,
-          status: 'pending'
-        };
-        setFollowUps(prev => [newFlw, ...prev]);
+        method = 'pos_dental';
       }
-    } else if (remainingAfter === 0) {
-      setFollowUps(prev => prev.map(f => (f.patientId === patientId && f.practice === practice && f.type === 'debt_reminder' && f.status === 'pending') ? { ...f, status: 'completed', resultNote: 'بدهی به طور کامل تسویه گردید' } : f));
+
+      const todayStr = getTodayJalaliDate();
+      const recordDateToUse = (customRecordDate && customRecordDate.trim()) ? customRecordDate.trim() : todayStr;
+
+      const targetTrx = transactionId
+        ? transactions.find(t => t.id === transactionId)
+        : transactions.find(t => t.patientId === patientId && t.practice === practice && t.trxType !== 'payment' && (t.remainingDebt > 0 || t.lastActionDate === todayStr));
+
+      await financeApi.recordPayment({
+        obligationId: targetTrx?.obligationId || targetTrx?.id,
+        patientId,
+        practice,
+        recordDate: recordDateToUse,
+        serviceDate: targetTrx?.serviceDate || targetTrx?.date,
+        paidAmount: amount,
+        paymentMethod: method,
+        posAccount: safePosAccount,
+        debtDueDate,
+        notes
+      });
+
+      const [freshTrxs, freshPats] = await Promise.all([
+        financeApi.getTransactions(),
+        patientsApi.getPatients()
+      ]);
+
+      setTransactions(freshTrxs);
+      setPatients(freshPats);
+      if (selectedPatient?.id === patientId) {
+        const freshSelected = freshPats.find(p => p.id === patientId);
+        if (freshSelected) setSelectedPatient(freshSelected);
+      }
+      return true;
+    } catch (err: any) {
+      console.error('Failed to collect payment:', err);
+      alert(err.message || 'خطا در ثبت دریافت وجه');
+      return false;
     }
-
-    return true;
   };
 
-  const updateFollowUp = (id: string, status: FollowUpStatus, resultNote: string) => {
-    setFollowUps(prev => prev.map(f => f.id === id ? {
-      ...f,
-      status,
-      resultNote,
-      updatedAt: '۱۴۰۵/۰۶/۱۶ - ۱۰:۱۵'
-    } : f));
+  const updateFollowUp = async (id: string, status: FollowUpStatus, resultNote: string) => {
+    try {
+      await followUpsApi.updateTaskStatus(id, status, resultNote);
+      const freshTasks = await followUpsApi.getTasks();
+      setFollowUps(freshTasks);
+    } catch (err: any) {
+      console.error('Failed to update follow-up task:', err);
+      alert(err.message || 'خطا در تغییر وضعیت یادآوری');
+    }
   };
 
-  const markPatientProfileCompleted = (patientId: string) => {
-    setPatients(prev => prev.map(p => p.id === patientId ? { ...p, profileStatus: 'completed' } : p));
+  const createTask = async (taskData: Omit<FollowUpTask, 'id'> & { title?: string }) => {
+    try {
+      await followUpsApi.createTask(taskData);
+      const freshTasks = await followUpsApi.getTasks();
+      setFollowUps(freshTasks);
+    } catch (err: any) {
+      console.error('Failed to create task:', err);
+      alert(err.message || 'خطا در ثبت یادآوری');
+    }
   };
 
-  const addPatient = (patientData: Omit<Patient, 'id' | 'fileNumber' | 'createdAt' | 'balance'>) => {
-    const targetPractice = patientData.primaryPractice || 'aesthetic';
-
-    // Calculate next physical file number for this practice
-    let maxNum = 100;
-    patients.forEach(item => {
-      const numStr = getPhysicalFileNumber(item, targetPractice);
-      if (numStr) {
-        const parsed = parseInt(numStr.replace(/\D/g, ''), 10);
-        if (!isNaN(parsed) && parsed > maxNum) maxNum = parsed;
+  const markPatientProfileCompleted = async (patientId: string) => {
+    try {
+      const updated = await patientsApi.updatePatient(patientId, { profileStatus: 'completed' });
+      setPatients(prev => prev.map(p => p.id === patientId ? updated : p));
+      if (selectedPatient?.id === patientId) {
+        setSelectedPatient(updated);
       }
-    });
-    const assignedPhysicalNum = String(maxNum + 1);
-    const fileNumber = `CL-${getMaxFileNumber(patients) + 1}`;
-
-    const newPatient: Patient = {
-      ...patientData,
-      id: `pat-${Date.now()}`,
-      fileNumber,
-      primaryPractice: targetPractice,
-      memberships: patientData.memberships || [
-        { practice: targetPractice, physicalFileNumber: assignedPhysicalNum, joinedAt: getTodayJalaliDate() }
-      ],
-      balance: 0,
-      createdAt: getTodayJalaliDate(),
-      profileStatus: 'completed'
-    };
-    setPatients(prev => [newPatient, ...prev]);
+    } catch (err: any) {
+      console.error('Failed to mark patient profile completed:', err);
+      setPatients(prev => prev.map(p => p.id === patientId ? { ...p, profileStatus: 'completed' } : p));
+    }
   };
 
-  const addExpense = (expenseData: Omit<ClinicExpense, 'id'>) => {
-    const newExpense: ClinicExpense = {
-      ...expenseData,
-      id: `exp-${Date.now()}`
-    };
-    setExpenses(prev => [newExpense, ...prev]);
+  const addPatient = async (patientData: Omit<Patient, 'id' | 'fileNumber' | 'createdAt' | 'balance'>) => {
+    try {
+      const targetPractice = patientData.primaryPractice || 'aesthetic';
+      const customNum = patientData.memberships?.[0]?.physicalFileNumber;
+
+      const created = await patientsApi.createPatient({
+        ...patientData,
+        primaryPractice: targetPractice,
+        customFileNumber: customNum
+      });
+
+      setPatients(prev => [created, ...prev.filter(p => p.id !== created.id)]);
+    } catch (err: any) {
+      console.error('Failed to add patient:', err);
+      alert(err.message || 'خطا در تشکیل پرونده الکترونیک بیمار');
+    }
   };
 
-  const addService = (serviceData: Omit<ServiceItem, 'id'>) => {
-    const newService: ServiceItem = {
-      ...serviceData,
-      id: `srv-${Date.now()}`
-    };
-    setServices(prev => [...prev, newService]);
+  const addExpense = async (expenseData: Omit<ClinicExpense, 'id'>) => {
+    try {
+      await financeApi.createExpense(expenseData);
+      const freshExps = await financeApi.getExpenses();
+      setExpenses(freshExps);
+    } catch (err: any) {
+      console.error('Failed to add expense:', err);
+      alert(err.message || 'خطا در ثبت هزینه');
+    }
   };
 
-  const updateService = (id: string, updatedData: Partial<ServiceItem>) => {
-    setServices(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
+  const updateGlobalShifts = async (shifts: GlobalShiftsConfig) => {
+    try {
+      const updated = await settingsApi.updateGlobalShifts(shifts);
+      setGlobalShifts(updated);
+    } catch (err: any) {
+      console.error('Failed to update global shifts:', err);
+      alert(err.message || 'خطا در ذخیره ساعات شیفت‌ها');
+    }
   };
 
-  const updateDoctorSchedule = (doctorId: string, schedule: DoctorDaySchedule[]) => {
-    setDoctors(prev => prev.map(d => d.id === doctorId ? { ...d, weeklySchedule: schedule } : d));
+  const addService = async (serviceData: Omit<ServiceItem, 'id'>) => {
+    try {
+      const created = await servicesApi.createService(serviceData);
+      setServices(prev => [...prev, created]);
+    } catch (err: any) {
+      console.error('Failed to add service:', err);
+      alert(err.message || 'خطا در تعریف خدمت جدید');
+    }
   };
 
-  const addPaymentAccount = (accountData: Omit<PaymentAccount, 'id'>) => {
-    const newAcc: PaymentAccount = {
-      ...accountData,
-      id: `acc-${Date.now()}`
-    };
-    setPaymentAccounts(prev => [...prev, newAcc]);
+  const updateService = async (id: string, updatedData: Partial<ServiceItem>) => {
+    try {
+      const updated = await servicesApi.updateService(id, updatedData);
+      setServices(prev => prev.map(s => s.id === id ? { ...s, ...updated } : s));
+    } catch (err: any) {
+      console.error('Failed to update service:', err);
+      alert(err.message || 'خطا در ویرایش خدمت');
+    }
   };
 
-  const updatePaymentAccount = (id: string, accountData: Omit<PaymentAccount, 'id'>) => {
-    setPaymentAccounts(prev => prev.map(acc => acc.id === id ? { ...acc, ...accountData } : acc));
+  const updateDoctorSchedule = async (doctorId: string, schedule: DoctorDaySchedule[]) => {
+    try {
+      const updatedSched = await doctorsApi.updateDoctorSchedule(doctorId, schedule);
+      setDoctors(prev => prev.map(d => d.id === doctorId ? { ...d, weeklySchedule: updatedSched } : d));
+    } catch (err: any) {
+      console.error('Failed to update doctor schedule:', err);
+      alert(err.message || 'خطا در ذخیره برنامه کاری پزشک');
+    }
+  };
+
+  const addPaymentAccount = async (accountData: Omit<PaymentAccount, 'id'>) => {
+    try {
+      const created = await paymentAccountsApi.createPaymentAccount(accountData);
+      setPaymentAccounts(prev => [...prev, created]);
+    } catch (err: any) {
+      console.error('Failed to add payment account:', err);
+      alert(err.message || 'خطا در افزودن حساب بانکی');
+    }
+  };
+
+  const updatePaymentAccount = async (id: string, accountData: Omit<PaymentAccount, 'id'>) => {
+    try {
+      const updated = await paymentAccountsApi.updatePaymentAccount(id, accountData);
+      setPaymentAccounts(prev => prev.map(acc => acc.id === id ? { ...acc, ...updated } : acc));
+    } catch (err: any) {
+      console.error('Failed to update payment account:', err);
+      alert(err.message || 'خطا در ویرایش حساب بانکی');
+    }
   };
 
   const getPracticePaymentAccounts = (practice: 'aesthetic' | 'dental'): string[] => {
@@ -863,8 +736,16 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return PRACTICE_PAYMENT_ACCOUNTS[practice] || [];
   };
 
-  const toggleServiceActive = (id: string) => {
-    setServices(prev => prev.map(s => s.id === id ? { ...s, active: !s.active } : s));
+  const toggleServiceActive = async (id: string) => {
+    const target = services.find(s => s.id === id);
+    if (!target) return;
+    try {
+      const updated = await servicesApi.updateService(id, { active: !target.active });
+      setServices(prev => prev.map(s => s.id === id ? { ...s, active: updated.active } : s));
+    } catch (err: any) {
+      console.error('Failed to toggle service active status:', err);
+      alert(err.message || 'خطا در تغییر وضعیت خدمت');
+    }
   };
 
   return (
@@ -891,7 +772,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         expenses,
         paymentAccounts,
         globalShifts,
-        updateGlobalShifts: setGlobalShifts,
+        updateGlobalShifts,
 
         updateDoctorSchedule,
         addPaymentAccount,
@@ -956,6 +837,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         recordCheckout,
         collectPayment,
         updateFollowUp,
+        createTask,
         addPatient,
         addExpense,
         addService,
