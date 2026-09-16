@@ -2,9 +2,6 @@ import React, { useState } from 'react';
 import { useClinic, hasPracticeMembership, getPatientFileNumberDisplay, getPhysicalFileNumber } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits, formatJalaliDateDisplay, getTodayJalaliDate, toEnglishDigits } from '../../utils/persianUtils';
 import { 
-  TrendingUp, 
-  TrendingDown, 
-  CreditCard, 
   History, 
   ShieldCheck,
   Eye,
@@ -18,7 +15,6 @@ export const FinanceView: React.FC = () => {
     scope, 
     userRole, 
     transactions, 
-    expenses, 
     patients, 
     openPaymentCollection, 
     openPatientProfile,
@@ -58,18 +54,12 @@ export const FinanceView: React.FC = () => {
     return scopeMatch && accountMatch;
   });
 
-  const filteredExpenses = expenses.filter(e => scope === 'unified' || e.practice === scope || e.practice === 'unified');
+  // const filteredExpenses = expenses.filter(e => scope === 'unified' || e.practice === scope || e.practice === 'unified');
   const debtorsList = patients.filter(p => {
     const scopeMatch = hasPracticeMembership(p, scope);
     if (!scopeMatch) return false;
     return p.balance < 0 || transactions.some(t => t.patientId === p.id && (t.remainingDebt > 0 || t.lastActionDate === selectedDate || t.debtDueDate !== undefined));
   });
-
-  // Totals
-  const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.paidAmount, 0);
-  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const netProfit = totalRevenue - totalExpenses;
-  const totalReceivables = debtorsList.reduce((sum, p) => sum + Math.abs(p.balance), 0);
 
   return (
     <div className="space-y-6 pb-12">
@@ -106,42 +96,6 @@ export const FinanceView: React.FC = () => {
             <span>ثبت دستی مبالغ گذشته</span>
           </button>
         </div>
-      </div>
-
-      {/* 3 Top Summary Cards (If Admin/Doctor visible full net profit, if Secretary visible revenue) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        
-        {/* Total Revenue Card */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-          <span className="text-xs font-bold text-slate-500">مجموع دریافتی‌های قطعی (کل کلینیک)</span>
-          <div className="text-2xl font-black text-emerald-600 flex items-center justify-between">
-            <span>{formatCurrency(totalRevenue)}</span>
-            <TrendingUp className="w-6 h-6 text-emerald-500" />
-          </div>
-        </div>
-
-        {/* Total Expenses Card */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-          <span className="text-xs font-bold text-slate-500">مجموع هزینه‌های ثبت‌شده</span>
-          <div className="text-2xl font-black text-rose-600 flex items-center justify-between">
-            <span>{formatCurrency(totalExpenses)}</span>
-            <TrendingDown className="w-6 h-6 text-rose-500" />
-          </div>
-        </div>
-
-        {/* Net Profit / Receivables Card */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
-          <span className="text-xs font-bold text-slate-500">
-            {userRole === 'admin_doctor' ? 'سود خالص عملیاتی کلینیک' : 'کل مطالبات و بدهی‌های معوقه'}
-          </span>
-          <div className="text-2xl font-black text-indigo-600 flex items-center justify-between">
-            <span>
-              {userRole === 'admin_doctor' ? formatCurrency(netProfit) : formatCurrency(totalReceivables)}
-            </span>
-            <CreditCard className="w-6 h-6 text-indigo-500" />
-          </div>
-        </div>
-
       </div>
 
       {/* POS Account Filter & Tabs Navigation */}

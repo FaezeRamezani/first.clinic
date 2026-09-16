@@ -9,6 +9,7 @@ import { PatientDirectoryView } from './components/patients/PatientDirectoryView
 import { FinanceView } from './components/finance/FinanceView';
 import { ServicesView } from './components/services/ServicesView';
 import { SettingsView } from './components/settings/SettingsView';
+import { ExcelImportView } from './components/import/ExcelImportView';
 
 import { GlobalSearchModal } from './components/modals/GlobalSearchModal';
 import { NewAppointmentModal } from './components/modals/NewAppointmentModal';
@@ -42,6 +43,8 @@ const MainContent: React.FC = () => {
         return <RemindersHubView />;
       case 'patients':
         return <PatientDirectoryView />;
+      case 'import':
+        return <ExcelImportView />;
       case 'finance':
         return <FinanceView />;
       case 'services':
@@ -52,6 +55,7 @@ const MainContent: React.FC = () => {
         return <DashboardView />;
     }
   };
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-vazirmatn text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">

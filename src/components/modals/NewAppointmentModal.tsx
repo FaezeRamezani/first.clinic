@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useClinic, getPhysicalFileNumber } from '../../context/ClinicContext';
+import { useClinic, getPhysicalFileNumber, getPatientFileNumberDisplay } from '../../context/ClinicContext';
 import { X, UserPlus, Search, UserCheck, Calendar, Check, Stethoscope, Sparkles, RefreshCw } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
 import { SearchableServiceSelect } from '../common/SearchableServiceSelect';
 import { getTodayJalaliDate, toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
+import { 
+  validatePersianName, 
+  validateIranianMobile, 
+  normalizeDigits 
+} from '../../utils/validation';
 import type { Patient } from '../../types';
 
 export const NewAppointmentModal: React.FC = () => {
@@ -16,6 +21,7 @@ export const NewAppointmentModal: React.FC = () => {
     patients, 
     doctors, 
     services, 
+    scope,
     addAppointment,
     addPatient,
     selectedPatient,
@@ -34,6 +40,7 @@ export const NewAppointmentModal: React.FC = () => {
   // New Patient Basic Info
   const [newPatientName, setNewPatientName] = useState<string>('');
   const [newPatientMobile, setNewPatientMobile] = useState<string>('');
+  const [validationError, setValidationError] = useState<string>('');
 
   // Appointment Form States
   const [doctorId, setDoctorId] = useState<string>('');
@@ -142,17 +149,35 @@ export const NewAppointmentModal: React.FC = () => {
 
   const handleProceedWithNewPatient = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPatientName.trim()) return;
+    setValidationError('');
+
+    const nameVal = validatePersianName(newPatientName, 'نام بیمار');
+    if (!nameVal.isValid) {
+      setValidationError(nameVal.error || 'نام بیمار معتبر نیست');
+      return;
+    }
+
+    const mobileVal = validateIranianMobile(newPatientMobile);
+    if (!mobileVal.isValid) {
+      setValidationError(mobileVal.error || 'شماره موبایل معتبر نیست');
+      return;
+    }
+
+    const cleanName = nameVal.normalized;
+    const cleanMobile = mobileVal.normalized;
+
+    setNewPatientName(cleanName);
+    setNewPatientMobile(cleanMobile);
 
     // Check if patient with same mobile already exists to prevent duplicate creation!
-    const existingPat = patients.find(p => p.mobile === newPatientMobile.trim());
+    const existingPat = patients.find(p => p.mobile === cleanMobile);
     if (existingPat) {
       setChosenPatient(existingPat);
     }
     setStep('details');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!doctorId) {
@@ -174,7 +199,7 @@ export const NewAppointmentModal: React.FC = () => {
 
     // Check once again if new patient mobile matches existing patient to avoid duplicates
     if (!chosenPatient && newPatientMobile) {
-      const existing = patients.find(p => p.mobile === newPatientMobile.trim());
+      const existing = patients.find(p => p.mobile === normalizeDigits(newPatientMobile.trim()));
       if (existing) {
         patId = existing.id;
         patName = existing.name;
@@ -182,20 +207,36 @@ export const NewAppointmentModal: React.FC = () => {
       }
     }
 
-    // If still no patient ID (genuinely brand new patient), create new patient record
+    // If still no patient ID (genuinely brand new patient), create new patient record first
     if (!patId) {
-      const newPatId = `pat-${Date.now()}`;
-      patId = newPatId;
-      addPatient({
-        name: patName,
-        mobile: patMobile,
-        nationalId: '۰۰۰۰۰۰۰۰۰۰',
-        primaryPractice: doc.practice,
-        memberships: [{ practice: doc.practice, physicalFileNumber: String(100 + patients.length + 1), joinedAt: getTodayJalaliDate() }],
-        allergies: [],
-        medicalNotes: '',
-        emergencyContact: { name: '-', phone: '-', relation: '-' }
-      });
+      try {
+        const nameVal = validatePersianName(patName, 'نام بیمار');
+        const mobVal = validateIranianMobile(patMobile);
+        if (!nameVal.isValid || !mobVal.isValid) {
+          alert(nameVal.error || mobVal.error || 'اطلاعات بیمار معتبر نیست');
+          return;
+        }
+
+        const createdPat = await addPatient({
+          name: nameVal.normalized,
+          mobile: mobVal.normalized,
+          nationalId: '',
+          primaryPractice: doc.practice,
+          profileStatus: 'incomplete',
+          memberships: [],
+          allergies: [],
+          medicalNotes: '',
+          emergencyContact: { name: '-', phone: '-', relation: '-' }
+        });
+        if (createdPat) {
+          patId = createdPat.id;
+          patName = createdPat.name;
+          patMobile = createdPat.mobile;
+        }
+      } catch (err) {
+        console.error('Error creating patient before appointment:', err);
+        return;
+      }
     }
 
     const targetPatientObj = patients.find(p => p.id === patId);
@@ -328,7 +369,7 @@ export const NewAppointmentModal: React.FC = () => {
                           </p>
                         </div>
                         <span className="px-2 py-0.5 bg-white border border-slate-200 text-indigo-700 rounded-lg text-[10px] font-extrabold dir-ltr">
-                          {toFarsiDigits(p.fileNumber)}
+                          {getPatientFileNumberDisplay(p, selectedDoctorObj ? selectedDoctorObj.practice : scope)}
                         </span>
                       </div>
                     ))}
@@ -340,13 +381,21 @@ export const NewAppointmentModal: React.FC = () => {
             {/* New Patient Form Section */}
             {patientTypeChoice === 'new' && (
               <form onSubmit={handleProceedWithNewPatient} className="space-y-3 pt-2">
+                {validationError && (
+                  <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-bold animate-in fade-in">
+                    {validationError}
+                  </div>
+                )}
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">نام و نام خانوادگی بیمار جدید:</label>
                   <input
                     type="text"
                     required
                     value={newPatientName}
-                    onChange={(e) => setNewPatientName(e.target.value)}
+                    onChange={(e) => {
+                      setNewPatientName(e.target.value);
+                      if (validationError) setValidationError('');
+                    }}
                     placeholder="مثلا: مریم رضایی"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold outline-none focus:border-emerald-500"
                   />
@@ -356,8 +405,12 @@ export const NewAppointmentModal: React.FC = () => {
                   <input
                     type="text"
                     required
+                    maxLength={11}
                     value={newPatientMobile}
-                    onChange={(e) => setNewPatientMobile(e.target.value)}
+                    onChange={(e) => {
+                      setNewPatientMobile(normalizeDigits(e.target.value));
+                      if (validationError) setValidationError('');
+                    }}
                     placeholder="۰۹۱۲۳۴۵۶۷۸۹"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold outline-none focus:border-emerald-500 dir-ltr text-right"
                   />
@@ -385,7 +438,7 @@ export const NewAppointmentModal: React.FC = () => {
                 </p>
                 <p className="text-[10px] text-slate-600 font-medium dir-ltr text-right">
                   {toFarsiDigits(chosenPatient ? chosenPatient.mobile : newPatientMobile)}
-                  {chosenPatient && ` | پرونده: ${toFarsiDigits(chosenPatient.fileNumber)}`}
+                  {chosenPatient && ` | پرونده: ${getPatientFileNumberDisplay(chosenPatient, selectedDoctorObj ? selectedDoctorObj.practice : scope)}`}
                 </p>
               </div>
               {!selectedPatient && !newAppointmentPrefill?.patient && !isRescheduleMode && (

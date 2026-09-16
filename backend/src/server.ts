@@ -13,6 +13,9 @@ import { financeRouter } from './modules/finance/finance.router';
 import { followupsRouter } from './modules/followups/followups.router';
 import { onlineRequestsRouter } from './modules/onlineRequests/onlineRequests.router';
 
+import multipart from '@fastify/multipart';
+import { excelImportRouter } from './modules/import/excelImport.router';
+
 dotenv.config();
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -36,6 +39,13 @@ const app = Fastify({
 await app.register(cors, {
   origin: [CORS_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+});
+
+// Register Multipart for File Uploads
+await app.register(multipart, {
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
 });
 
 // GET /api/health endpoint
@@ -67,6 +77,8 @@ await app.register(appointmentsRouter, { prefix: '/api/appointments' });
 await app.register(financeRouter, { prefix: '/api/finance' });
 await app.register(followupsRouter, { prefix: '/api/tasks' });
 await app.register(onlineRequestsRouter, { prefix: '/api/online-requests' });
+await app.register(excelImportRouter, { prefix: '/api/import' });
+
 
 // Start Server
 const start = async () => {

@@ -71,15 +71,15 @@ export const IncompletePatientCredentialsModal: React.FC<IncompletePatientCreden
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="p-2.5 bg-white rounded-xl border border-indigo-100">
               <span className="block text-[10px] text-slate-400 font-bold mb-0.5">نام کاربری:</span>
-              <span className="block dir-ltr text-right font-mono font-bold text-indigo-950 text-xs truncate">
-                {toFarsiDigits(username)}
+              <span className="block dir-ltr text-left font-mono font-bold tracking-wider text-indigo-950 text-xs truncate selection:bg-indigo-100">
+                {username}
               </span>
             </div>
 
             <div className="p-2.5 bg-white rounded-xl border border-indigo-100">
               <span className="block text-[10px] text-slate-400 font-bold mb-0.5">رمز عبور موقت:</span>
-              <span className="block dir-ltr text-right font-mono font-bold text-indigo-950 text-xs truncate">
-                {toFarsiDigits(password)}
+              <span className="block dir-ltr text-left font-mono font-bold tracking-wider text-indigo-950 text-xs truncate selection:bg-indigo-100">
+                {password}
               </span>
             </div>
           </div>

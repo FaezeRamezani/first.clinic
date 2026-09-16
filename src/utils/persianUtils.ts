@@ -55,7 +55,15 @@ export function normalizeJalaliDate(dateStr: string): string {
 
 export function formatJalaliDateDisplay(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
-  const eng = toEnglishDigits(dateStr).trim().replace(/-/g, '/');
+  const str = dateStr.toString().trim();
+  // Handle ISO timestamp string (e.g. 2026-09-16T12:18:52.505Z)
+  if (str.includes('T') || str.includes('Z')) {
+    const m = moment(str).locale('fa');
+    if (m.isValid()) {
+      return toFarsiDigits(m.format('jYYYY/jMM/jDD'));
+    }
+  }
+  const eng = toEnglishDigits(str).trim().replace(/-/g, '/');
   const parts = eng.split('/');
   if (parts.length === 3) {
     let [year, month, day] = parts;
@@ -63,6 +71,9 @@ export function formatJalaliDateDisplay(dateStr: string | null | undefined): str
       const temp = year;
       year = day;
       day = temp;
+    }
+    if (day.includes('T')) {
+      day = day.split('T')[0];
     }
     const formatted = `${year}/${month.padStart(2, '0')}/${day.padStart(2, '0')}`;
     return toFarsiDigits(formatted);

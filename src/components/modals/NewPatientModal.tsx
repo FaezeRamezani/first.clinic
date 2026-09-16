@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
 import { getTodayJalaliDate } from '../../utils/persianUtils';
-import { X } from 'lucide-react';
+import { 
+  validatePersianName, 
+  validateIranianMobile, 
+  validateIranianNationalId, 
+  normalizeDigits 
+} from '../../utils/validation';
+import { X, AlertCircle } from 'lucide-react';
 
 export const NewPatientModal: React.FC = () => {
   const { isNewPatientOpen, setIsNewPatientOpen, addPatient, patients, ensurePatientMembership } = useClinic();
@@ -17,6 +23,8 @@ export const NewPatientModal: React.FC = () => {
   const [emergencyName] = useState<string>('');
   const [emergencyPhone] = useState<string>('');
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   React.useEffect(() => {
     if (isNewPatientOpen) {
       setName('');
@@ -26,6 +34,7 @@ export const NewPatientModal: React.FC = () => {
       setPrimaryPractice('aesthetic');
       setAllergiesStr('');
       setMedicalNotes('');
+      setErrorMessage(null);
     }
   }, [isNewPatientOpen]);
 
@@ -33,10 +42,35 @@ export const NewPatientModal: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !mobile) return;
+    setErrorMessage(null);
+
+    // 1. Validate Name
+    const nameVal = validatePersianName(name, 'نام و نام خانوادگی');
+    if (!nameVal.isValid) {
+      setErrorMessage(nameVal.error || 'نام بیمار معتبر نیست');
+      return;
+    }
+
+    // 2. Validate Mobile
+    const mobileVal = validateIranianMobile(mobile);
+    if (!mobileVal.isValid) {
+      setErrorMessage(mobileVal.error || 'شماره موبایل معتبر نیست');
+      return;
+    }
+
+    // 3. Validate National ID (Optional)
+    const nidVal = validateIranianNationalId(nationalId, true);
+    if (!nidVal.isValid) {
+      setErrorMessage(nidVal.error || 'کد ملی معتبر نیست');
+      return;
+    }
+
+    const cleanName = nameVal.normalized;
+    const cleanMobile = mobileVal.normalized;
+    const cleanNationalId = nidVal.normalized;
 
     // Check duplicate warning by mobile / national ID
-    const duplicate = patients.find(p => p.mobile === mobile || (nationalId && p.nationalId === nationalId));
+    const duplicate = patients.find(p => p.mobile === cleanMobile || (cleanNationalId && p.nationalId === cleanNationalId));
     if (duplicate) {
       alert(`اطلاعات این شخص قبلاً با نام «${duplicate.name}» در سیستم ثبت شده است. عضویت ${primaryPractice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'} برای همین بیمار فعال گردید.`);
       ensurePatientMembership(duplicate.id, primaryPractice);
@@ -48,9 +82,9 @@ export const NewPatientModal: React.FC = () => {
     }
 
     addPatient({
-      name,
-      mobile,
-      nationalId: nationalId || '۰۰۰۰۰۰۰۰۰۰',
+      name: cleanName,
+      mobile: cleanMobile,
+      nationalId: cleanNationalId,
       gender,
       birthDate,
       primaryPractice,
@@ -68,6 +102,7 @@ export const NewPatientModal: React.FC = () => {
     setName('');
     setMobile('');
     setNationalId('');
+    setErrorMessage(null);
   };
 
   return (
@@ -81,6 +116,13 @@ export const NewPatientModal: React.FC = () => {
           </button>
         </div>
 
+        {errorMessage && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-600 text-xs font-bold animate-in fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           
           <div>
@@ -89,9 +131,12 @@ export const NewPatientModal: React.FC = () => {
               type="text"
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errorMessage) setErrorMessage(null);
+              }}
               placeholder="مثلا: ناهید رضایی"
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
+              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             />
           </div>
 
@@ -101,21 +146,29 @@ export const NewPatientModal: React.FC = () => {
               <input
                 type="text"
                 required
+                maxLength={11}
                 value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
+                onChange={(e) => {
+                  setMobile(normalizeDigits(e.target.value));
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="۰۹۱۲۳۴۵۶۷۸۹"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               />
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">کد ملی ۱۰ رقمی:</label>
+              <label className="block font-bold text-slate-700 mb-1">کد ملی ۱۰ رقمی (اختیاری):</label>
               <input
                 type="text"
+                maxLength={10}
                 value={nationalId}
-                onChange={(e) => setNationalId(e.target.value)}
-                placeholder="۰۰۱۲۳۴۵۶۷۸"
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
+                onChange={(e) => {
+                  setNationalId(normalizeDigits(e.target.value));
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                placeholder="۰۰۱۲۳۴۵۶۷۹"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               />
             </div>
           </div>

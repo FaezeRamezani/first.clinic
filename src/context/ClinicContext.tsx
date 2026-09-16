@@ -57,16 +57,27 @@ export const hasPracticeMembership = (patient: Patient | null | undefined, targe
 
 export const getPhysicalFileNumber = (patient: Patient | null | undefined, practice?: PracticeType | ClinicScope | null): string => {
   if (!patient) return '';
-  const targetPractice = (practice && practice !== 'unified') ? practice : patient.primaryPractice;
-  if (patient.memberships && patient.memberships.length > 0) {
-    const found = patient.memberships.find(m => m.practice === targetPractice);
-    if (found && found.physicalFileNumber) return found.physicalFileNumber;
-    if (patient.memberships[0] && patient.memberships[0].physicalFileNumber) return patient.memberships[0].physicalFileNumber;
+  const targetPractice = (practice && practice !== 'unified') ? practice : null;
+  if (targetPractice) {
+    if (patient.memberships && patient.memberships.length > 0) {
+      const found = patient.memberships.find(m => m.practice === targetPractice);
+      if (found && found.physicalFileNumber) return found.physicalFileNumber;
+    }
+    if (patient.primaryPractice === targetPractice && patient.fileNumber) {
+      return patient.fileNumber.replace(/^CL-/, '');
+    }
+    return '';
   }
-  if (patient.primaryPractice === targetPractice && patient.fileNumber) {
+
+  // Fallback when no specific practice is requested
+  if (patient.memberships && patient.memberships.length > 0) {
+    const primary = patient.memberships.find(m => m.practice === patient.primaryPractice) || patient.memberships[0];
+    if (primary && primary.physicalFileNumber) return primary.physicalFileNumber;
+  }
+  if (patient.fileNumber) {
     return patient.fileNumber.replace(/^CL-/, '');
   }
-  return patient.fileNumber || '';
+  return '';
 };
 
 export const getPatientFileNumberDisplay = (patient: Patient | null | undefined, targetScope?: ClinicScope | PracticeType | null): string => {
@@ -75,10 +86,10 @@ export const getPatientFileNumberDisplay = (patient: Patient | null | undefined,
   const aestheticNum = getPhysicalFileNumber(patient, 'aesthetic');
 
   if (targetScope === 'dental') {
-    return dentalNum ? toFarsiDigits(dentalNum) : (patient.fileNumber ? toFarsiDigits(patient.fileNumber) : '-');
+    return dentalNum ? toFarsiDigits(dentalNum) : '-';
   }
   if (targetScope === 'aesthetic') {
-    return aestheticNum ? toFarsiDigits(aestheticNum) : (patient.fileNumber ? toFarsiDigits(patient.fileNumber) : '-');
+    return aestheticNum ? toFarsiDigits(aestheticNum) : '-';
   }
 
   // Scope === 'unified' (All practices)
@@ -88,9 +99,9 @@ export const getPatientFileNumberDisplay = (patient: Patient | null | undefined,
   if (hasDental && hasAesthetic) {
     return `دندان: ${toFarsiDigits(dentalNum || '-')} | زیبایی: ${toFarsiDigits(aestheticNum || '-')}`;
   } else if (hasDental) {
-    return dentalNum ? toFarsiDigits(dentalNum) : (patient.fileNumber ? toFarsiDigits(patient.fileNumber) : '-');
+    return dentalNum ? `دندان: ${toFarsiDigits(dentalNum)}` : '-';
   } else if (hasAesthetic) {
-    return aestheticNum ? toFarsiDigits(aestheticNum) : (patient.fileNumber ? toFarsiDigits(patient.fileNumber) : '-');
+    return aestheticNum ? `زیبایی: ${toFarsiDigits(aestheticNum)}` : '-';
   }
   return patient.fileNumber ? toFarsiDigits(patient.fileNumber) : '-';
 };
@@ -194,7 +205,7 @@ interface ClinicContextType {
   addPaymentAccount: (account: Omit<PaymentAccount, 'id'>) => void;
   updatePaymentAccount: (id: string, account: Omit<PaymentAccount, 'id'>) => void;
   getPracticePaymentAccounts: (practice: 'aesthetic' | 'dental') => string[];
-  addPatient: (patientData: Omit<Patient, 'id' | 'fileNumber' | 'createdAt' | 'balance'>) => void;
+  addPatient: (patientData: Omit<Patient, 'id' | 'fileNumber' | 'createdAt' | 'balance'>) => Promise<Patient>;
   addExpense: (expenseData: Omit<ClinicExpense, 'id'>) => void;
   addService: (serviceData: Omit<ServiceItem, 'id'>) => void;
   updateService: (id: string, serviceData: Partial<ServiceItem>) => void;
@@ -202,7 +213,9 @@ interface ClinicContextType {
   createdIncompletePatientModal: Patient | null;
   setCreatedIncompletePatientModal: (p: Patient | null) => void;
   markPatientProfileCompleted: (patientId: string) => void;
+  refreshPatients: () => Promise<void>;
 }
+
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
@@ -358,6 +371,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const ensurePatientMembership = async (patientId: string, practice: 'aesthetic' | 'dental', customFileNumber?: string) => {
+    // Check if patient already has membership for this practice in current state
+    const existingPatient = patients.find(p => p.id === patientId);
+    if (existingPatient?.memberships?.some(m => m.practice === practice)) {
+      return;
+    }
+
     try {
       const updated = await patientsApi.addPatientMembership(patientId, practice, customFileNumber);
       setPatients(prev => prev.map(p => p.id === patientId ? updated : p));
@@ -365,6 +384,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSelectedPatient(updated);
       }
     } catch (err: any) {
+      if (err.message && (err.message.includes('از قبل در این مطب دارای پرونده') || err.message.includes('عضویت فعال در این مطب'))) {
+        console.info('Patient already has membership for practice:', practice);
+        return;
+      }
       console.error('Failed to ensure patient membership:', err);
       alert(err.message || 'خطا در ثبت عضویت مطب بیمار');
     }
@@ -483,21 +506,37 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let finalPatientId = trxData.patientId;
       const existingPatient = patients.find(p => p.id === trxData.patientId || (p.mobile && p.mobile === trxData.patientName));
 
-      if (!existingPatient && !patients.some(p => p.id === trxData.patientId)) {
-        const targetAppt = appointments.find(a => a.id === trxData.appointmentId);
-        const mobileToUse = targetAppt?.patientMobile || '۰۹۱۲۰۰۰۰۰۰۰';
+      const isUnprofiled = !existingPatient || !existingPatient.memberships || existingPatient.memberships.length === 0 || !existingPatient.memberships.some(m => !!m.physicalFileNumber);
 
-        const createdPt = await patientsApi.createPatient({
-          name: trxData.patientName,
-          mobile: mobileToUse,
-          primaryPractice: trxData.practice || 'aesthetic',
-          profileStatus: 'incomplete',
-          memberships: [{ practice: trxData.practice || 'aesthetic', physicalFileNumber: '' }]
-        });
+      if (isUnprofiled) {
+        const targetAppt = appointments.find(a => a.id === trxData.appointmentId);
+        const mobileToUse = targetAppt?.patientMobile || (existingPatient ? existingPatient.mobile : '۰۹۱۲۰۰۰۰۰۰۰');
+
+        let createdPt: Patient;
+        if (existingPatient) {
+          createdPt = await patientsApi.updatePatient(existingPatient.id, {
+            profileStatus: 'incomplete'
+          });
+          await ensurePatientMembership(existingPatient.id, trxData.practice || 'aesthetic');
+          const freshPats = await patientsApi.getPatients();
+          const freshPt = freshPats.find(p => p.id === existingPatient.id) || createdPt;
+          setCreatedIncompletePatientModal(freshPt);
+        } else {
+          createdPt = await patientsApi.createPatient({
+            name: trxData.patientName,
+            mobile: mobileToUse,
+            primaryPractice: trxData.practice || 'aesthetic',
+            profileStatus: 'incomplete',
+            memberships: [{ practice: trxData.practice || 'aesthetic', physicalFileNumber: '' }]
+          });
+          setCreatedIncompletePatientModal(createdPt);
+        }
         finalPatientId = createdPt.id;
-        setCreatedIncompletePatientModal(createdPt);
       } else if (existingPatient) {
         finalPatientId = existingPatient.id;
+        if (existingPatient.profileStatus === 'incomplete') {
+          setCreatedIncompletePatientModal(existingPatient);
+        }
       }
 
       let effectiveDueDate = trxData.debtDueDate;
@@ -641,7 +680,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const addPatient = async (patientData: Omit<Patient, 'id' | 'fileNumber' | 'createdAt' | 'balance'>) => {
+  const addPatient = async (patientData: Omit<Patient, 'id' | 'fileNumber' | 'createdAt' | 'balance'>): Promise<Patient> => {
     try {
       const targetPractice = patientData.primaryPractice || 'aesthetic';
       const customNum = patientData.memberships?.[0]?.physicalFileNumber;
@@ -653,9 +692,11 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       setPatients(prev => [created, ...prev.filter(p => p.id !== created.id)]);
+      return created;
     } catch (err: any) {
       console.error('Failed to add patient:', err);
       alert(err.message || 'خطا در تشکیل پرونده الکترونیک بیمار');
+      throw err;
     }
   };
 
@@ -700,6 +741,19 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const toggleServiceActive = async (id: string) => {
+    const target = services.find(s => s.id === id);
+    if (!target) return;
+    try {
+      const updated = await servicesApi.updateService(id, { active: !target.active });
+      setServices(prev => prev.map(s => s.id === id ? { ...s, active: updated.active } : s));
+    } catch (err: any) {
+      console.error('Failed to toggle service active status:', err);
+      alert(err.message || 'خطا در تغییر وضعیت خدمت');
+    }
+  };
+
+
   const updateDoctorSchedule = async (doctorId: string, schedule: DoctorDaySchedule[]) => {
     try {
       const updatedSched = await doctorsApi.updateDoctorSchedule(doctorId, schedule);
@@ -736,15 +790,14 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return PRACTICE_PAYMENT_ACCOUNTS[practice] || [];
   };
 
-  const toggleServiceActive = async (id: string) => {
-    const target = services.find(s => s.id === id);
-    if (!target) return;
+  const refreshPatients = async () => {
     try {
-      const updated = await servicesApi.updateService(id, { active: !target.active });
-      setServices(prev => prev.map(s => s.id === id ? { ...s, active: updated.active } : s));
-    } catch (err: any) {
-      console.error('Failed to toggle service active status:', err);
-      alert(err.message || 'خطا در تغییر وضعیت خدمت');
+      const patsData = await patientsApi.getPatients();
+      if (Array.isArray(patsData)) {
+        setPatients(patsData);
+      }
+    } catch (err) {
+      console.error('Failed to refresh patients:', err);
     }
   };
 
@@ -771,6 +824,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         followUps,
         expenses,
         paymentAccounts,
+
         globalShifts,
         updateGlobalShifts,
 
@@ -845,7 +899,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         toggleServiceActive,
         createdIncompletePatientModal,
         setCreatedIncompletePatientModal,
-        markPatientProfileCompleted
+        markPatientProfileCompleted,
+        refreshPatients
       }}
     >
       {children}
@@ -858,3 +913,4 @@ export const useClinic = () => {
   if (!context) throw new Error('useClinic must be used within a ClinicProvider');
   return context;
 };
+

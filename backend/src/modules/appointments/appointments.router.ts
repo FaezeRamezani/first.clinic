@@ -7,6 +7,7 @@ import { doctors } from '../../db/schema/doctors';
 import { services } from '../../db/schema/services';
 import { eq, and, ne, inArray } from 'drizzle-orm';
 import { toStandardJalaliDbDate, toEnglishDigits } from '../../utils/dateUtils';
+import { sanitizeFreeText } from '../../utils/validation';
 
 const appointmentStatusEnum = z.enum(['pending', 'checked_in', 'completed', 'canceled', 'rescheduled', 'unsettled']);
 const presenceStatusEnum = z.enum(['present', 'absent', 'pending']);
@@ -23,9 +24,9 @@ const createAppointmentSchema = z.object({
   duration: z.number().optional().default(30),
   status: appointmentStatusEnum.optional().default('pending'),
   presenceStatus: presenceStatusEnum.optional().nullable(),
-  notes: z.string().optional().nullable(),
+  notes: z.string().optional().nullable().transform(val => sanitizeFreeText(val, 1000)),
   cabinetNumber: z.string().optional().nullable(),
-  cancellationReason: z.string().optional().nullable(),
+  cancellationReason: z.string().optional().nullable().transform(val => sanitizeFreeText(val, 500)),
   cancellationType: cancellationTypeEnum.optional().nullable(),
   canceledAt: z.string().optional().nullable(),
   previousAppointmentId: z.string().optional().nullable(),

@@ -192,3 +192,48 @@ export interface ClinicExpense {
   description?: string;
   receiptNumber?: string;
 }
+
+export type ImportCategory = 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate';
+
+export interface ImportBatch {
+  id: string;
+  fileName: string;
+  practice: 'aesthetic' | 'dental';
+  createdAt: string;
+  status: 'preview' | 'committed' | 'discarded';
+  totalRecords: number;
+  validCount: number;
+  missingNameCount: number;
+  missingPcCount: number;
+  invalidPhoneCount: number;
+  duplicateCount: number;
+}
+
+export interface ImportRecord {
+  id: string;
+  batchId: string;
+  excelRowNumber: number;
+  practice: 'aesthetic' | 'dental';
+  rawPc?: string | null;
+  rawName?: string | null;
+  rawPhone?: string | null;
+  normalizedPc?: string | null;
+  normalizedName?: string | null;
+  normalizedPhone?: string | null;
+  category: ImportCategory;
+  issues: string[];
+  duplicateTargetPatientId?: string | null;
+  duplicateTargetRecordId?: string | null;
+  duplicateReason?: string | null;
+  duplicateResolution: 'unresolved' | 'merged_same_person' | 'separate_different_person' | 'ignored';
+  importedPatientId?: string | null;
+  status: 'staged' | 'committed' | 'ignored';
+  matchedPatient?: {
+    id: string;
+    name: string;
+    mobile: string;
+    fileNumber?: string;
+    memberships: PracticeMembership[];
+  } | null;
+}
+

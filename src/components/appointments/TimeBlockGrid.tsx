@@ -91,6 +91,8 @@ export const TimeBlockGrid: React.FC = () => {
 
     return dateAppointments.filter(a => {
       if (a.doctorId !== doctorId) return false;
+      // Exclude canceled and rescheduled appointments so slots are freed for re-booking
+      if (a.status === 'canceled' || a.status === 'rescheduled') return false;
       const apptTime = toEnglishDigits(a.timeSlot).trim();
       const parts = apptTime.split(':');
       if (parts.length < 2) return false;
@@ -215,7 +217,7 @@ export const TimeBlockGrid: React.FC = () => {
         <div className="text-xs text-slate-500 font-medium pt-1 border-t border-slate-100 flex items-center justify-between">
           <span>{formatJalaliDateLong(selectedDate)}</span>
           <span className="text-slate-400">
-            تعداد کل نوبت‌های این روز: <strong className="text-indigo-600 font-bold">{toFarsiDigits(dateAppointments.length)}</strong> نوبت
+            تعداد کل نوبت‌های این روز: <strong className="text-indigo-600 font-bold">{toFarsiDigits(dateAppointments.filter(a => a.status !== 'canceled' && a.status !== 'rescheduled').length)}</strong> نوبت
           </span>
         </div>
 
@@ -225,7 +227,7 @@ export const TimeBlockGrid: React.FC = () => {
       <div className={`grid gap-6 ${displayedDoctors.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
         {displayedDoctors.map((doc) => {
           const isAesthetic = doc.practice === 'aesthetic';
-          const docAppointments = dateAppointments.filter(a => a.doctorId === doc.id);
+          const docAppointments = dateAppointments.filter(a => a.doctorId === doc.id && a.status !== 'canceled' && a.status !== 'rescheduled');
           const docAppointmentsCount = docAppointments.length;
           const docInterval = getDoctorInterval(doc.id);
           

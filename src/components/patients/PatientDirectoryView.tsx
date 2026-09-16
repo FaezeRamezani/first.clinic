@@ -12,12 +12,9 @@ import {
   Users,
   UserX,
   Key,
-  Copy,
-  Check,
   Clock
 } from 'lucide-react';
 import { PatientDetailModal } from './PatientDetailModal';
-import type { Patient } from '../../types';
 
 export const PatientDirectoryView: React.FC = () => {
   const { 
@@ -33,14 +30,13 @@ export const PatientDirectoryView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'completed' | 'incomplete'>('completed');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [copiedPatientId, setCopiedPatientId] = useState<string | null>(null);
 
   // Filter patients by scope using practice membership
   const scopePatients = patients.filter(p => hasPracticeMembership(p, scope));
 
-  // Separate completed and incomplete profiles
-  const completedPatients = scopePatients.filter(p => p.profileStatus !== 'incomplete');
-  const incompletePatients = scopePatients.filter(p => p.profileStatus === 'incomplete');
+  // Separate completed and incomplete profiles (incomplete profiles are shown only after checkout when a physical file number is assigned)
+  const completedPatients = scopePatients.filter(p => p.profileStatus === 'completed');
+  const incompletePatients = scopePatients.filter(p => p.profileStatus === 'incomplete' && p.memberships && p.memberships.length > 0 && p.memberships.some(m => !!m.physicalFileNumber));
 
   // Filter currently active tab by search query
   const targetPatients = activeTab === 'completed' ? completedPatients : incompletePatients;
@@ -56,21 +52,6 @@ export const PatientDirectoryView: React.FC = () => {
     const hasMatchNational = p.nationalId && p.nationalId.includes(q);
     return hasMatchName || hasMatchMobile || hasMatchFile || hasMatchNational;
   });
-
-  const handleCopyCredentials = (patient: Patient) => {
-    const username = patient.loginCredentials?.username || patient.mobile;
-    const password = patient.loginCredentials?.password || 'cl-123456';
-    const textToCopy = `اطلاعات ورود به سیستم کلینیک:
-نام بیمار: ${patient.name}
-شماره پرونده: ${getPatientFileNumberDisplay(patient, scope)}
-شماره موبایل: ${patient.mobile}
-نام کاربری: ${username}
-رمز عبور: ${password}`;
-
-    navigator.clipboard.writeText(textToCopy);
-    setCopiedPatientId(patient.id);
-    setTimeout(() => setCopiedPatientId(null), 2500);
-  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -383,29 +364,6 @@ export const PatientDirectoryView: React.FC = () => {
                           >
                             <Key className="w-3.5 h-3.5 text-indigo-600" />
                             <span>اطلاعات ورود</span>
-                          </button>
-
-                          {/* Copy Credentials */}
-                          <button
-                            onClick={() => handleCopyCredentials(patient)}
-                            className={`px-2.5 py-1.5 border rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
-                              copiedPatientId === patient.id
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-                            }`}
-                            title="کپی متن کامل اطلاعات ورود به حافظه"
-                          >
-                            {copiedPatientId === patient.id ? (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                <span>کپی شد!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3.5 h-3.5" />
-                                <span>کپی ورود</span>
-                              </>
-                            )}
                           </button>
 
                         </div>

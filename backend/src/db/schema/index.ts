@@ -8,3 +8,5 @@ export * from './followups';
 export * from './expenses';
 export * from './onlineRequests';
 export * from './settings';
+export * from './import';
+

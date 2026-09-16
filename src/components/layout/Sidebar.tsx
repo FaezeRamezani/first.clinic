@@ -11,9 +11,10 @@ import {
   Building2,
   ChevronLeft,
   Calendar,
-  Plus
+  Plus,
+  FileSpreadsheet
 } from 'lucide-react';
-import { useClinic } from '../../context/ClinicContext';
+import { useClinic, hasPracticeMembership } from '../../context/ClinicContext';
 import { toFarsiDigits } from '../../utils/persianUtils';
 
 export const Sidebar: React.FC = () => {
@@ -22,11 +23,20 @@ export const Sidebar: React.FC = () => {
     setActiveView,
     scope,
     onlineRequests,
-    openNewAppointment
+    openNewAppointment,
+    patients
   } = useClinic();
 
   // Calculate badge counts
   const pendingRequestsCount = onlineRequests.filter(r => r.status === 'pending').length;
+
+  const incompleteCount = patients.filter(p => 
+    hasPracticeMembership(p, scope) && 
+    p.profileStatus === 'incomplete' && 
+    p.memberships && 
+    p.memberships.length > 0 && 
+    p.memberships.some(m => !!m.physicalFileNumber)
+  ).length;
 
   const navItems = [
     {
@@ -46,6 +56,13 @@ export const Sidebar: React.FC = () => {
       id: 'patients',
       label: 'پرونده بیماران',
       icon: Users,
+      badge: incompleteCount > 0 ? (incompleteCount > 10 ? '+۱۰ پرونده ناقص' : `${toFarsiDigits(incompleteCount)} پرونده ناقص`) : null,
+      badgeColor: 'bg-rose-100 text-rose-800 border border-rose-200'
+    },
+    {
+      id: 'import',
+      label: 'ورود بیماران از Excel',
+      icon: FileSpreadsheet,
       badge: null
     },
     {
@@ -67,6 +84,7 @@ export const Sidebar: React.FC = () => {
       badge: null
     }
   ];
+
 
   // Visual tokens for practice scope
   const scopeConfig = {

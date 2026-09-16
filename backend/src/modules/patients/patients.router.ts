@@ -5,23 +5,50 @@ import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { financialObligations, paymentReceipts } from '../../db/schema/finance';
 import { eq, and } from 'drizzle-orm';
 import { toStandardJalaliDbDate } from '../../utils/dateUtils';
+import { 
+  validatePersianName, 
+  validateIranianMobile, 
+  validateIranianNationalId, 
+  normalizeDigits, 
+  normalizePersianChars, 
+  sanitizeFreeText 
+} from '../../utils/validation';
 
 const createPatientSchema = z.object({
-  name: z.string().min(1, 'نام بیمار الزامی است'),
-  mobile: z.string().min(1, 'شماره موبایل الزامی است'),
-  nationalId: z.string().optional().nullable(),
+  name: z.string().superRefine((val, ctx) => {
+    const res = validatePersianName(val, 'نام بیمار');
+    if (!res.isValid) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: res.error });
+    }
+  }).transform(val => validatePersianName(val).normalized),
+
+  mobile: z.string().superRefine((val, ctx) => {
+    const res = validateIranianMobile(val);
+    if (!res.isValid) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: res.error });
+    }
+  }).transform(val => validateIranianMobile(val).normalized),
+
+  nationalId: z.string().optional().nullable().superRefine((val, ctx) => {
+    if (!val) return;
+    const res = validateIranianNationalId(val, true);
+    if (!res.isValid) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: res.error });
+    }
+  }).transform(val => val ? validateIranianNationalId(val, true).normalized : val),
+
   gender: z.enum(['female', 'male']).optional().nullable(),
   birthDate: z.string().optional().nullable(),
   primaryPractice: z.enum(['aesthetic', 'dental']).optional().default('aesthetic'),
   allergies: z.array(z.string()).optional().default([]),
-  medicalNotes: z.string().optional().nullable(),
+  medicalNotes: z.string().optional().nullable().transform(val => sanitizeFreeText(val, 1000)),
   emergencyContact: z.object({
-    name: z.string().optional().nullable(),
-    phone: z.string().optional().nullable(),
-    relation: z.string().optional().nullable()
+    name: z.string().optional().nullable().transform(val => val ? normalizePersianChars(normalizeDigits(val.trim())) : val),
+    phone: z.string().optional().nullable().transform(val => val ? normalizeDigits(val.trim()) : val),
+    relation: z.string().optional().nullable().transform(val => val ? sanitizeFreeText(val, 100) : val)
   }).optional().nullable(),
-  profileStatus: z.enum(['incomplete', 'completed']).optional().default('completed'),
-  customFileNumber: z.string().optional().nullable(),
+  profileStatus: z.enum(['incomplete', 'completed', 'temp']).optional().default('completed'),
+  customFileNumber: z.string().optional().nullable().transform(val => val ? normalizeDigits(val.trim()) : val),
   memberships: z.array(z.object({
     practice: z.enum(['aesthetic', 'dental']),
     physicalFileNumber: z.string().optional(),
@@ -405,7 +432,7 @@ export async function patientsRouter(fastify: FastifyInstance) {
       if (existingMem) {
         return reply.status(409).send({
           success: false,
-          error: { code: 'DUPLICATE_MEMBERSHIP', message: 'این بیمار قبلاً دارای عضویت فعال در این مطب می‌باشد.' }
+          error: { code: 'DUPLICATE_MEMBERSHIP', message: 'این بیمار از قبل در این مطب دارای پرونده (عضویت) می‌باشد و نیازی به ایجاد پرونده جدید ندارد.' }
         });
       }
 

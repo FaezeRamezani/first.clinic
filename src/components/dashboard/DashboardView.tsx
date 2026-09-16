@@ -468,12 +468,12 @@ export const DashboardView: React.FC = () => {
                             {isAesthetic ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-200/80 text-purple-900 text-[10px] font-bold">
                                 <Sparkles className="w-3 h-3 text-purple-700" />
-                                <span>زیبایی (دکتر رمضانی)</span>
+                                <span>زیبایی</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-200/80 text-teal-900 text-[10px] font-bold">
                                 <Stethoscope className="w-3 h-3 text-teal-700" />
-                                <span>دندانپزشکی (دکتر آخرتی)</span>
+                                <span>دندانپزشکی</span>
                               </span>
                             )}
                           </td>

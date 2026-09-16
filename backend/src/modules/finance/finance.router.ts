@@ -8,6 +8,7 @@ import { services } from '../../db/schema/services';
 import { paymentAccounts } from '../../db/schema/paymentAccounts';
 import { eq, and, sql } from 'drizzle-orm';
 import { toStandardJalaliDbDate, toEnglishDigits } from '../../utils/dateUtils';
+import { sanitizeFreeText } from '../../utils/validation';
 import moment from 'jalali-moment';
 
 function getTodayJalaliStr(): string {
@@ -26,7 +27,7 @@ const createObligationSchema = z.object({
   totalCost: z.number().min(0, 'مبلغ خدمت نباید منفی باشد'),
   discount: z.number().min(0).optional().default(0),
   dueDate: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
+  notes: z.string().optional().nullable().transform(val => sanitizeFreeText(val, 1000)),
   // Initial Payment at checkout
   paidAmount: z.number().min(0).optional().default(0),
   paymentMethod: z.enum(['cash', 'pos_aesthetic', 'pos_dental', 'card_transfer']).optional(),
@@ -49,7 +50,7 @@ const createPaymentSchema = z.object({
   posAccount: z.string().optional().nullable(),
   timestamp: z.string().optional().nullable(),
   debtDueDate: z.string().optional().nullable(),
-  notes: z.string().optional().nullable()
+  notes: z.string().optional().nullable().transform(val => sanitizeFreeText(val, 1000))
 });
 
 const createExpenseSchema = z.object({

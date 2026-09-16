@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useClinic, hasPracticeMembership, getPhysicalFileNumber } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
+import { validatePhysicalFileNumber } from '../../utils/validation';
 import { 
   X, 
   User, 
@@ -333,9 +334,12 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                       {editingDentalFile ? (
                         <button
                           onClick={() => {
-                            if (dentalFileValue.trim()) {
-                              updatePhysicalFileNumber(currentPatient.id, 'dental', dentalFileValue.trim());
+                            const val = validatePhysicalFileNumber(dentalFileValue, false);
+                            if (!val.isValid) {
+                              alert(val.error || 'شماره پرونده معتبر نیست');
+                              return;
                             }
+                            updatePhysicalFileNumber(currentPatient.id, 'dental', val.normalized);
                             setEditingDentalFile(false);
                           }}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
@@ -379,9 +383,12 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                       {editingAestheticFile ? (
                         <button
                           onClick={() => {
-                            if (aestheticFileValue.trim()) {
-                              updatePhysicalFileNumber(currentPatient.id, 'aesthetic', aestheticFileValue.trim());
+                            const val = validatePhysicalFileNumber(aestheticFileValue, false);
+                            if (!val.isValid) {
+                              alert(val.error || 'شماره پرونده معتبر نیست');
+                              return;
                             }
+                            updatePhysicalFileNumber(currentPatient.id, 'aesthetic', val.normalized);
                             setEditingAestheticFile(false);
                           }}
                           className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
