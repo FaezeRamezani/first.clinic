@@ -23,6 +23,22 @@ const shiftsUpdateSchema = z.object({
   path: ['evening', 'startTime']
 });
 
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { id: 'consumables', name: 'مواد مصرفی' },
+  { id: 'rent', name: 'اجاره و رهن' },
+  { id: 'salaries', name: 'حقوق پرسنل' },
+  { id: 'equipment', name: 'تجهیزات و تعمیرات' },
+  { id: 'utilities', name: 'قبوض و نگهداری' },
+  { id: 'other', name: 'متفرقه' }
+];
+
+const categorySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1, 'نام دسته‌بندی الزامی است')
+});
+
+const expenseCategoriesUpdateSchema = z.array(categorySchema);
+
 export async function settingsRouter(fastify: FastifyInstance) {
   // GET /api/settings/shifts
   fastify.get('/shifts', async (request, reply) => {
@@ -91,6 +107,73 @@ export async function settingsRouter(fastify: FastifyInstance) {
       return reply.status(500).send({
         success: false,
         error: { code: 'INTERNAL_ERROR', message: 'خطا در بروزرسانی شیفت‌ها' }
+      });
+    }
+  });
+
+  // GET /api/settings/expense-categories
+  fastify.get('/expense-categories', async (request, reply) => {
+    try {
+      const setting = db.select().from(clinicSettings).where(eq(clinicSettings.key, 'expense_categories')).get();
+      let categories = DEFAULT_EXPENSE_CATEGORIES;
+
+      if (setting && setting.value) {
+        try {
+          categories = JSON.parse(setting.value);
+        } catch (e) {
+          console.error('Failed to parse expense_categories setting JSON:', e);
+        }
+      }
+
+      return reply.send({
+        success: true,
+        data: categories
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'خطا در دریافت دسته‌بندی‌های هزینه' }
+      });
+    }
+  });
+
+  // PUT /api/settings/expense-categories
+  fastify.put('/expense-categories', async (request, reply) => {
+    try {
+      const parseResult = expenseCategoriesUpdateSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        const issue = parseResult.error.issues[0];
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: issue?.message || 'اطلاعات دسته‌بندی‌ها معتبر نیست' }
+        });
+      }
+
+      const updatedCategories = parseResult.data;
+      const jsonValue = JSON.stringify(updatedCategories);
+
+      const existing = db.select().from(clinicSettings).where(eq(clinicSettings.key, 'expense_categories')).get();
+      if (existing) {
+        db.update(clinicSettings)
+          .set({ value: jsonValue })
+          .where(eq(clinicSettings.key, 'expense_categories'))
+          .run();
+      } else {
+        db.insert(clinicSettings)
+          .values({ key: 'expense_categories', value: jsonValue })
+          .run();
+      }
+
+      return reply.send({
+        success: true,
+        data: updatedCategories
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'خطا در بروزرسانی دسته‌بندی‌های هزینه' }
       });
     }
   });

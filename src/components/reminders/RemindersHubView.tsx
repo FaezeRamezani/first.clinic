@@ -177,40 +177,47 @@ export const RemindersHubView: React.FC = () => {
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {todayVisits
                   .filter(a => matchSearch(a.patientName, a.patientMobile, a.fileNumber))
-                  .map(apt => (
-                    <tr key={apt.id} className="hover:bg-slate-50/80">
-                      <td className="py-3.5 px-4 font-bold text-slate-900 dir-ltr text-right">{toFarsiDigits(apt.timeSlot)}</td>
-                      <td className="py-3.5 px-4 font-bold text-indigo-600">
-                        {(() => {
-                          const patObj = patients.find(p => p.id === apt.patientId);
-                          return patObj ? getPatientFileNumberDisplay(patObj, apt.practice) : toFarsiDigits(apt.fileNumber);
-                        })()}
-                      </td>
-                      <td className="py-3.5 px-4 font-bold text-slate-800">
-                        <button
-                          onClick={() => openPatientProfile(apt.patientId)}
-                          className="hover:text-indigo-600 hover:underline text-right font-bold transition-colors"
-                        >
-                          {apt.patientName}
-                        </button>
-                      </td>
-                      <td className="py-3.5 px-4">{toFarsiDigits(apt.patientMobile)}</td>
-                      <td className="py-3.5 px-4">{apt.doctorName} ({apt.cabinetNumber || 'اتاق ۱'})</td>
-                      <td className="py-3.5 px-4">
-                        {apt.status === 'pending' && <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">در انتظار</span>}
-                        {apt.status === 'checked_in' && <span className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">حاضر در مطب</span>}
-                        {apt.status === 'completed' && <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded font-bold text-[10px]">تکمیل‌شده</span>}
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => openQuickCheckout(apt)}
-                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[11px]"
-                        >
-                          ثبت تسویه
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  .map(apt => {
+                    const hasOb = transactions.some(t => t.appointmentId === apt.id);
+                    return (
+                      <tr key={apt.id} className="hover:bg-slate-50/80">
+                        <td className="py-3.5 px-4 font-bold text-slate-900 dir-ltr text-right">{toFarsiDigits(apt.timeSlot)}</td>
+                        <td className="py-3.5 px-4 font-bold text-indigo-600">
+                          {(() => {
+                            const patObj = patients.find(p => p.id === apt.patientId);
+                            return patObj ? getPatientFileNumberDisplay(patObj, apt.practice) : toFarsiDigits(apt.fileNumber);
+                          })()}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-slate-800">
+                          <button
+                            onClick={() => openPatientProfile(apt.patientId)}
+                            className="hover:text-indigo-600 hover:underline text-right font-bold transition-colors"
+                          >
+                            {apt.patientName}
+                          </button>
+                        </td>
+                        <td className="py-3.5 px-4">{toFarsiDigits(apt.patientMobile)}</td>
+                        <td className="py-3.5 px-4">{apt.doctorName} ({apt.cabinetNumber || 'اتاق ۱'})</td>
+                        <td className="py-3.5 px-4">
+                          {apt.status === 'pending' && <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">در انتظار</span>}
+                          {apt.status === 'checked_in' && <span className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">حاضر در مطب</span>}
+                          {apt.status === 'completed' && <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded font-bold text-[10px]">تکمیل‌شده</span>}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          {hasOb || apt.status === 'completed' ? (
+                            <span className="text-[11px] text-slate-500 font-bold">تسویه‌شده</span>
+                          ) : (
+                            <button
+                              onClick={() => openQuickCheckout(apt)}
+                              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-[11px]"
+                            >
+                              ثبت تسویه
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

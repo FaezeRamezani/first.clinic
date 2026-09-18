@@ -181,10 +181,15 @@ export interface FollowUpTask {
   updatedAt?: string;
 }
 
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+}
+
 export interface ClinicExpense {
   id: string;
   title: string;
-  category: 'consumables' | 'rent' | 'salaries' | 'equipment' | 'utilities' | 'other';
+  category: string;
   amount: number; // Tomans
   date: string; // Jalali YYYY-MM-DD
   practice: 'aesthetic' | 'dental' | 'unified';

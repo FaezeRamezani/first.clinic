@@ -14,11 +14,28 @@ export function runSeed() {
 
   // Use a database transaction for atomic seeding
   sqlite.transaction(() => {
-    // 1. Seed Global Settings (Shifts)
+    // 1. Seed Global Settings (Shifts & Expense Categories)
     db.insert(schema.clinicSettings)
       .values({
         key: 'global_shifts',
         value: JSON.stringify(initialGlobalShifts)
+      })
+      .onConflictDoNothing()
+      .run();
+
+    const initialExpenseCategories = [
+      { id: 'consumables', name: 'مواد مصرفی' },
+      { id: 'rent', name: 'اجاره و رهن' },
+      { id: 'salaries', name: 'حقوق پرسنل' },
+      { id: 'equipment', name: 'تجهیزات و تعمیرات' },
+      { id: 'utilities', name: 'قبوض و نگهداری' },
+      { id: 'other', name: 'متفرقه' }
+    ];
+
+    db.insert(schema.clinicSettings)
+      .values({
+        key: 'expense_categories',
+        value: JSON.stringify(initialExpenseCategories)
       })
       .onConflictDoNothing()
       .run();

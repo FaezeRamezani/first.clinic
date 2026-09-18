@@ -4,10 +4,10 @@ import { X } from 'lucide-react';
 import { MoneyInput } from '../common/MoneyInput';
 
 export const NewExpenseModal: React.FC = () => {
-  const { isNewExpenseOpen, setIsNewExpenseOpen, addExpense } = useClinic();
+  const { isNewExpenseOpen, setIsNewExpenseOpen, addExpense, expenseCategories } = useClinic();
 
   const [title, setTitle] = useState<string>('');
-  const [category, setCategory] = useState<'consumables' | 'rent' | 'salaries' | 'equipment' | 'utilities' | 'other'>('consumables');
+  const [category, setCategory] = useState<string>('consumables');
   const [amount, setAmount] = useState<number>(0);
   const [date, setDate] = useState<string>('۱۴۰۵-۰۶-۱۶');
   const [practice, setPractice] = useState<'aesthetic' | 'dental' | 'unified'>('aesthetic');
@@ -17,12 +17,12 @@ export const NewExpenseModal: React.FC = () => {
   React.useEffect(() => {
     if (isNewExpenseOpen) {
       setTitle('');
-      setCategory('consumables');
+      setCategory(expenseCategories[0]?.id || 'consumables');
       setAmount(0);
       setPractice('aesthetic');
       setReceiptNumber('');
     }
-  }, [isNewExpenseOpen]);
+  }, [isNewExpenseOpen, expenseCategories]);
 
   if (!isNewExpenseOpen) return null;
 
@@ -76,15 +76,12 @@ export const NewExpenseModal: React.FC = () => {
               <label className="block font-bold text-slate-700 mb-1">دسته‌بندی هزینه:</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
+                onChange={(e) => setCategory(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none"
               >
-                <option value="consumables">مواد مصرفی</option>
-                <option value="rent">اجاره و رهن</option>
-                <option value="salaries">حقوق پرسنل</option>
-                <option value="equipment">تجهیزات و تعمیرات</option>
-                <option value="utilities">قبوض و نگهداری</option>
-                <option value="other">متفرقه</option>
+                {expenseCategories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
               </select>
             </div>
 

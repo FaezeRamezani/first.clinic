@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { Settings, Sparkles, Stethoscope, CreditCard, Save, CheckCircle2, Plus, Edit3, Calendar, X, Clock, AlertCircle } from 'lucide-react';
-import type { Doctor, DoctorDaySchedule, PaymentAccount, DayOfWeekPersian, GlobalShiftsConfig } from '../../types';
+import { Settings, Sparkles, Stethoscope, CreditCard, Save, CheckCircle2, Plus, Edit3, Calendar, X, Clock, AlertCircle, Tag } from 'lucide-react';
+import type { Doctor, DoctorDaySchedule, PaymentAccount, DayOfWeekPersian, GlobalShiftsConfig, ExpenseCategory } from '../../types';
 import { toFarsiDigits } from '../../utils/persianUtils';
 
 const ALL_DAYS: DayOfWeekPersian[] = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه'];
@@ -14,14 +14,16 @@ const TIME_OPTIONS = [
 ];
 
 export const SettingsView: React.FC = () => {
-  const { 
-    doctors, 
-    paymentAccounts, 
+  const {
+    doctors,
+    paymentAccounts,
     globalShifts,
     updateGlobalShifts,
-    updateDoctorSchedule, 
-    addPaymentAccount, 
-    updatePaymentAccount 
+    expenseCategories,
+    updateExpenseCategories,
+    updateDoctorSchedule,
+    addPaymentAccount,
+    updatePaymentAccount
   } = useClinic();
 
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -42,6 +44,43 @@ export const SettingsView: React.FC = () => {
   const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(null);
   const [accountName, setAccountName] = useState<string>('');
   const [accountPractice, setAccountPractice] = useState<'aesthetic' | 'dental'>('aesthetic');
+
+  // Expense Category Modal States
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
+  const [editingCategory, setEditingCategory] = useState<ExpenseCategory | null>(null);
+  const [categoryName, setCategoryName] = useState<string>('');
+
+  const handleOpenAddCategoryModal = () => {
+    setEditingCategory(null);
+    setCategoryName('');
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleOpenEditCategoryModal = (cat: ExpenseCategory) => {
+    setEditingCategory(cat);
+    setCategoryName(cat.name);
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = () => {
+    if (!categoryName || !categoryName.trim()) return;
+
+    let updated: ExpenseCategory[];
+    if (editingCategory) {
+      updated = expenseCategories.map(c => c.id === editingCategory.id ? { ...c, name: categoryName.trim() } : c);
+    } else {
+      const newCat: ExpenseCategory = {
+        id: `cat-${Date.now()}`,
+        name: categoryName.trim()
+      };
+      updated = [...expenseCategories, newCat];
+    }
+
+    updateExpenseCategories(updated);
+    setIsCategoryModalOpen(false);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
 
   // --- Central Shift Handlers ---
   const handleSaveGlobalShifts = () => {
@@ -74,7 +113,7 @@ export const SettingsView: React.FC = () => {
   // --- Doctor Schedule Handlers ---
   const handleOpenScheduleModal = (doc: Doctor) => {
     setSelectedDoctorForSchedule(doc);
-    
+
     const currentSchedule = doc.weeklySchedule || [];
 
     const fullSchedule: DoctorDaySchedule[] = ALL_DAYS.map(dayName => {
@@ -153,7 +192,7 @@ export const SettingsView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      
+
       {/* Header (Minimal & Card-less) */}
       <div className="flex items-center justify-between py-2">
         <div>
@@ -172,7 +211,7 @@ export const SettingsView: React.FC = () => {
 
       {/* Main 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        
+
         {/* Right Visual Column (RTL 1st): Time Controls & Doctor Schedules */}
         <div className="space-y-6">
 
@@ -303,9 +342,8 @@ export const SettingsView: React.FC = () => {
                       <div className="flex items-center gap-2">
                         {doc.practice === 'aesthetic' ? <Sparkles className="w-4 h-4 text-indigo-600" /> : <Stethoscope className="w-4 h-4 text-teal-600" />}
                         <span className="font-extrabold text-slate-900 text-sm">{doc.name}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          doc.practice === 'aesthetic' ? 'bg-purple-100 text-purple-800' : 'bg-teal-100 text-teal-800'
-                        }`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${doc.practice === 'aesthetic' ? 'bg-purple-100 text-purple-800' : 'bg-teal-100 text-teal-800'
+                          }`}>
                           {doc.practice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'}
                         </span>
                       </div>
@@ -391,6 +429,40 @@ export const SettingsView: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Expense Categories Section */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                <Tag className="w-4.5 h-4.5 text-indigo-600" />
+                <span>دسته‌بندی هزینه‌ها</span>
+              </h3>
+
+              <button
+                onClick={handleOpenAddCategoryModal}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ افزودن دسته‌بندی</span>
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {expenseCategories.map((cat) => (
+                <div key={cat.id} className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs hover:bg-slate-100/80 transition-colors">
+                  <span className="font-bold text-slate-900">{cat.name}</span>
+
+                  <button
+                    onClick={() => handleOpenEditCategoryModal(cat)}
+                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-bold text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-3 h-3 text-amber-600" />
+                    <span>ویرایش</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
       </div>
@@ -399,15 +471,14 @@ export const SettingsView: React.FC = () => {
       {selectedDoctorForSchedule && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
-            
+
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-extrabold text-slate-800">جدول شیفت‌های کاری پزشک</h3>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                    selectedDoctorForSchedule.practice === 'aesthetic' ? 'bg-purple-100 text-purple-900' : 'bg-teal-100 text-teal-900'
-                  }`}>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${selectedDoctorForSchedule.practice === 'aesthetic' ? 'bg-purple-100 text-purple-900' : 'bg-teal-100 text-teal-900'
+                    }`}>
                     {selectedDoctorForSchedule.name} ({selectedDoctorForSchedule.practice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'})
                   </span>
                 </div>
@@ -498,7 +569,7 @@ export const SettingsView: React.FC = () => {
       {isAccountModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
-            
+
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-extrabold text-slate-800">
                 {editingAccount ? 'ویرایش حساب / کارتخوان' : 'افزودن حساب / کارتخوان جدید'}
@@ -546,6 +617,52 @@ export const SettingsView: React.FC = () => {
               >
                 <Save className="w-4 h-4" />
                 <span>ذخیره حساب</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+      {/* Expense Category Add/Edit Modal */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150">
+
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-extrabold text-slate-800">
+                {editingCategory ? 'ویرایش دسته‌بندی هزینه' : 'افزودن دسته‌بندی هزینه جدید'}
+              </h3>
+              <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">نام دسته‌بندی هزینه:</label>
+                <input
+                  type="text"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  placeholder="مثلاً: تبلیغات و بازاریابی"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                onClick={handleSaveCategory}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
+              >
+                <Save className="w-4 h-4" />
+                <span>ذخیره دسته‌بندی</span>
               </button>
             </div>
 

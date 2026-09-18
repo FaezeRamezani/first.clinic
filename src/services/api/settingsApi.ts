@@ -1,5 +1,5 @@
 import { request } from './httpClient';
-import type { GlobalShiftsConfig } from '../../types';
+import type { GlobalShiftsConfig, ExpenseCategory } from '../../types';
 
 export const settingsApi = {
   getGlobalShifts: async (): Promise<GlobalShiftsConfig> => {
@@ -12,6 +12,19 @@ export const settingsApi = {
     return request<GlobalShiftsConfig>('/api/settings/shifts', {
       method: 'PUT',
       body: JSON.stringify(shifts)
+    });
+  },
+
+  getExpenseCategories: async (): Promise<ExpenseCategory[]> => {
+    return request<ExpenseCategory[]>('/api/settings/expense-categories', {
+      method: 'GET'
+    });
+  },
+
+  updateExpenseCategories: async (categories: ExpenseCategory[]): Promise<ExpenseCategory[]> => {
+    return request<ExpenseCategory[]>('/api/settings/expense-categories', {
+      method: 'PUT',
+      body: JSON.stringify(categories)
     });
   }
 };

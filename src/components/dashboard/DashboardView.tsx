@@ -75,7 +75,7 @@ export const DashboardView: React.FC = () => {
       (t.obligationId === ob.id || (ob.appointmentId && t.appointmentId === ob.appointmentId))
     );
 
-    const totalPaidOnObligation = (ob.paidAmount || 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+    const totalPaidOnObligation = linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
     const remainingDebt = Math.max(0, (ob.netCost || 0) - totalPaidOnObligation);
 
     const latestPayment = linkedPayments[0];
@@ -110,9 +110,11 @@ export const DashboardView: React.FC = () => {
 
   // Presence & Status Renderer for Dashboard Table
   const renderPresenceButton = (apt: Appointment) => {
-    if (apt.status === 'completed') {
+    const hasOb = transactions.some(t => t.appointmentId === apt.id);
+
+    if (hasOb || apt.status === 'completed') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-bold">
           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
           <span>تکمیل</span>
         </span>
@@ -301,6 +303,7 @@ export const DashboardView: React.FC = () => {
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {todayAppointments.map((apt) => {
                       const isAesthetic = apt.practice === 'aesthetic';
+                      const hasOb = transactions.some(t => t.appointmentId === apt.id);
                       // Clear visible warmer practice row tint
                       const rowClass = isAesthetic
                         ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950'
@@ -352,7 +355,7 @@ export const DashboardView: React.FC = () => {
                           </td>
                           <td className="py-3 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1">
-                              {apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled' && (
+                              {apt.status !== 'completed' && apt.status !== 'canceled' && apt.status !== 'rescheduled' && !hasOb && (
                                 <>
                                   <button
                                     onClick={() => openQuickCheckout(apt)}
@@ -372,13 +375,13 @@ export const DashboardView: React.FC = () => {
                                   </button>
                                 </>
                               )}
-                              {apt.status === 'completed' && (
+                              {(hasOb || apt.status === 'completed') && (
                                 <span className="text-[10px] text-slate-500 font-bold">تسویه‌شده</span>
                               )}
-                              {apt.status === 'rescheduled' && (
+                              {apt.status === 'rescheduled' && !hasOb && (
                                 <span className="text-[10px] text-slate-500 font-bold">انتقال‌یافته</span>
                               )}
-                              {apt.status === 'canceled' && (
+                              {apt.status === 'canceled' && !hasOb && (
                                 <span className="text-[10px] text-slate-500 font-bold">لغوشده</span>
                               )}
                             </div>

@@ -161,7 +161,6 @@ export const FinanceView: React.FC = () => {
                   <th className="py-3 px-4">خدمت ارائه شده</th>
                   <th className="py-3 px-4">مطب مربوطه</th>
                   <th className="py-3 px-4">هزینه کل</th>
-                  <th className="py-3 px-4">تخفیف</th>
                   <th className="py-3 px-4 text-emerald-600">پرداختی قطعی</th>
                   <th className="py-3 px-4 text-rose-600">بدهی باقیمانده</th>
                   <th className="py-3 px-4">حساب کارتخوان مقصد</th>
@@ -195,7 +194,6 @@ export const FinanceView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3.5 px-4">{formatCurrency(trx.totalCost)}</td>
-                    <td className="py-3.5 px-4 text-slate-400">{formatCurrency(trx.discount)}</td>
                     <td className="py-3.5 px-4 font-bold text-emerald-600">{formatCurrency(trx.paidAmount)}</td>
                     <td className="py-3.5 px-4 font-bold text-rose-600">
                       {trx.remainingDebt > 0 ? formatCurrency(trx.remainingDebt) : '۰'}
@@ -235,7 +233,7 @@ export const FinanceView: React.FC = () => {
                     ? patTrxs.filter(t => t.trxType === 'payment' && (t.obligationId === targetTrx.id || (t.appointmentId && t.appointmentId === targetTrx.appointmentId)))
                     : patTrxs.filter(t => t.trxType === 'payment');
 
-                  const totalPaidSoFar = (targetTrx ? targetTrx.paidAmount : 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+                  const totalPaidSoFar = linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
                   const liveRemainingDebt = targetTrx ? Math.max(0, targetTrx.netCost - totalPaidSoFar) : (pat.balance < 0 ? Math.abs(pat.balance) : 0);
 
                   const targetPractice = targetTrx ? targetTrx.practice : pat.primaryPractice;

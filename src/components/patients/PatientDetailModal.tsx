@@ -59,7 +59,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
 
   // Total spent & paid calculations for selected scope
   const totalSpent = patientTransactions.reduce((sum, t) => sum + t.netCost, 0);
-  const totalPaid = patientTransactions.reduce((sum, t) => sum + t.paidAmount, 0);
+  const totalPaid = patientTransactions.filter(t => t.trxType === 'payment').reduce((sum, t) => sum + t.paidAmount, 0);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">

@@ -4,18 +4,24 @@ import { formatCurrency, toFarsiDigits, formatJalaliDateDisplay } from '../../ut
 import { Plus, Sparkles, Stethoscope, Building2 } from 'lucide-react';
 
 export const ExpensesLogTab: React.FC = () => {
-  const { scope, expenses, setIsNewExpenseOpen } = useClinic();
+  const { scope, expenses, expenseCategories, setIsNewExpenseOpen } = useClinic();
 
   const filteredExpenses = expenses.filter(e => scope === 'unified' || e.practice === scope || e.practice === 'unified');
   const totalExpensesAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const categoryLabels: Record<string, string> = {
+  const fallbackCategoryLabels: Record<string, string> = {
     consumables: 'مواد مصرفی مطب',
     rent: 'اجاره و رهن',
     salaries: 'حقوق و پرسنل',
     equipment: 'تجهیزات و تعمیرات',
     utilities: 'قبوض و نگهداری',
     other: 'متفرقه'
+  };
+
+  const getCategoryName = (catId: string) => {
+    const matched = expenseCategories.find(c => c.id === catId);
+    if (matched) return matched.name;
+    return fallbackCategoryLabels[catId] || catId;
   };
 
   return (
@@ -61,7 +67,7 @@ export const ExpensesLogTab: React.FC = () => {
                   <td className="py-3.5 px-4 font-bold text-slate-900">{exp.title}</td>
                   <td className="py-3.5 px-4">
                     <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg font-semibold text-[11px]">
-                      {categoryLabels[exp.category] || exp.category}
+                      {getCategoryName(exp.category)}
                     </span>
                   </td>
                   <td className="py-3.5 px-4">

@@ -423,6 +423,19 @@ export async function financeRouter(fastify: FastifyInstance) {
         });
       }
 
+      // Check if an obligation already exists for this appointmentId
+      if (data.appointmentId) {
+        const existingOb = db.select().from(financialObligations)
+          .where(eq(financialObligations.appointmentId, data.appointmentId))
+          .get();
+        if (existingOb) {
+          return reply.status(400).send({
+            success: false,
+            error: 'برای این نوبت قبلاً تسویه مالی ثبت شده است.'
+          });
+        }
+      }
+
       // Determine Due Date (Default payment terms if serviceId exists)
       let effectiveDueDate = data.dueDate ? toStandardJalaliDbDate(data.dueDate) : null;
       const netCost = data.totalCost - data.discount;
@@ -615,6 +628,9 @@ export async function financeRouter(fastify: FastifyInstance) {
             const currentRemaining = Math.max(0, net - totalPaidSoFar);
 
             // Overpayment protection
+            if (currentRemaining === 0) {
+              throw new Error('OVERPAYMENT:بدهی مربوط به این نوبت/تعهد قبلاً کاملاً تسویه شده است.');
+            }
             if (paymentAmt > currentRemaining) {
               throw new Error('OVERPAYMENT:مبلغ دریافت‌شده نمی‌تواند بیشتر از بدهی باقیمانده باشد.');
             }

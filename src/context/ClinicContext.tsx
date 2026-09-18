@@ -13,6 +13,7 @@ import type {
   FinancialTransaction,
   FollowUpTask,
   ClinicExpense,
+  ExpenseCategory,
   FollowUpStatus,
   DoctorDaySchedule,
   PaymentAccount,
@@ -25,6 +26,15 @@ const DEFAULT_GLOBAL_SHIFTS: GlobalShiftsConfig = {
   morning: { startTime: '09:00', endTime: '14:00' },
   evening: { startTime: '16:00', endTime: '21:00' }
 };
+
+const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  { id: 'consumables', name: 'مواد مصرفی' },
+  { id: 'rent', name: 'اجاره و رهن' },
+  { id: 'salaries', name: 'حقوق پرسنل' },
+  { id: 'equipment', name: 'تجهیزات و تعمیرات' },
+  { id: 'utilities', name: 'قبوض و نگهداری' },
+  { id: 'other', name: 'متفرقه' }
+];
 
 export const PRACTICE_PAYMENT_ACCOUNTS = {
   aesthetic: [
@@ -201,6 +211,8 @@ interface ClinicContextType {
   paymentAccounts: PaymentAccount[];
   globalShifts: GlobalShiftsConfig;
   updateGlobalShifts: (shifts: GlobalShiftsConfig) => void;
+  expenseCategories: ExpenseCategory[];
+  updateExpenseCategories: (categories: ExpenseCategory[]) => Promise<void>;
   updateDoctorSchedule: (doctorId: string, schedule: DoctorDaySchedule[]) => void;
   addPaymentAccount: (account: Omit<PaymentAccount, 'id'>) => void;
   updatePaymentAccount: (id: string, account: Omit<PaymentAccount, 'id'>) => void;
@@ -236,6 +248,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [globalShifts, setGlobalShifts] = useState<GlobalShiftsConfig>(DEFAULT_GLOBAL_SHIFTS);
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(DEFAULT_EXPENSE_CATEGORIES);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -280,8 +293,9 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const loadBackendData = async () => {
       try {
-        const [shiftsData, docsData, srvsData, accsData, patsData, aptsData, trxsData, expsData, tasksData, reqsData] = await Promise.all([
+        const [shiftsData, catsData, docsData, srvsData, accsData, patsData, aptsData, trxsData, expsData, tasksData, reqsData] = await Promise.all([
           settingsApi.getGlobalShifts().catch(() => null),
+          settingsApi.getExpenseCategories().catch(() => null),
           doctorsApi.getDoctors().catch(() => null),
           servicesApi.getServices().catch(() => null),
           paymentAccountsApi.getPaymentAccounts().catch(() => null),
@@ -296,6 +310,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (!isMounted) return;
 
         if (shiftsData) setGlobalShifts(shiftsData);
+        if (Array.isArray(catsData) && catsData.length > 0) setExpenseCategories(catsData);
         if (Array.isArray(docsData)) setDoctors(docsData);
         if (Array.isArray(srvsData)) setServices(srvsData);
         if (Array.isArray(accsData)) setPaymentAccounts(accsData);
@@ -323,6 +338,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const openQuickCheckout = (appointment: Appointment) => {
+    if (appointment.id && transactions.some(t => t.appointmentId === appointment.id)) {
+      alert('برای این نوبت قبلاً تسویه مالی انجام شده است.');
+      return;
+    }
     setSelectedAppointmentForCheckout(appointment);
     setIsQuickCheckoutOpen(true);
   };
@@ -503,6 +522,10 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const recordCheckout = async (trxData: Omit<FinancialTransaction, 'id'>) => {
     try {
+      if (trxData.appointmentId && transactions.some(t => t.appointmentId === trxData.appointmentId)) {
+        alert('برای این نوبت قبلاً تسویه مالی ثبت شده است.');
+        return;
+      }
       let finalPatientId = trxData.patientId;
       const existingPatient = patients.find(p => p.id === trxData.patientId || (p.mobile && p.mobile === trxData.patientName));
 
@@ -721,6 +744,16 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const updateExpenseCategories = async (categories: ExpenseCategory[]) => {
+    try {
+      const updated = await settingsApi.updateExpenseCategories(categories);
+      setExpenseCategories(updated);
+    } catch (err: any) {
+      console.error('Failed to update expense categories:', err);
+      alert(err.message || 'خطا در ذخیره دسته‌بندی‌های هزینه');
+    }
+  };
+
   const addService = async (serviceData: Omit<ServiceItem, 'id'>) => {
     try {
       const created = await servicesApi.createService(serviceData);
@@ -827,6 +860,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         globalShifts,
         updateGlobalShifts,
+        expenseCategories,
+        updateExpenseCategories,
 
         updateDoctorSchedule,
         addPaymentAccount,
