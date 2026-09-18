@@ -9,6 +9,7 @@ import { toStandardJalaliDbDate } from '../../utils/dateUtils';
 import {
   validatePersianName,
   validateIranianMobile,
+  normalizeIranianMobile,
   normalizeDigits,
   normalizePersianChars
 } from '../../utils/validation';
@@ -198,20 +199,48 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         });
       }
 
-      // Existing DB data for duplicate detection
+      // Existing DB data for comprehensive duplicate detection
       const existingPatients = db.select().from(patients).all();
       const existingMemberships = db.select().from(patientPracticeMemberships).all();
       
-      const phoneToPatientMap = new Map<string, typeof existingPatients[0]>();
+      // 1. Phone -> Patient Map
+      const dbPhoneMap = new Map<string, typeof existingPatients[0]>();
       for (const p of existingPatients) {
-        const normMob = normalizeDigits(p.mobile.trim());
-        if (normMob) phoneToPatientMap.set(normMob, p);
+        const normMob = normalizeIranianMobile(p.mobile);
+        if (normMob) dbPhoneMap.set(normMob, p);
       }
 
-      const pcPracticeToMemMap = new Map<string, typeof existingMemberships[0]>();
+      // 2. PC in SAME practice -> Membership & Patient Map
+      const dbPracticePcMap = new Map<string, { mem: typeof existingMemberships[0]; patient: typeof existingPatients[0] }>();
       for (const m of existingMemberships) {
-        const normPc = normalizeDigits(m.physicalFileNumber.trim());
-        if (normPc) pcPracticeToMemMap.set(`${m.practice}:${normPc}`, m);
+        const normPc = normalizeDigits(m.physicalFileNumber.trim()).replace(/\.0+$/, '');
+        const pt = existingPatients.find(p => p.id === m.patientId);
+        if (normPc && pt) {
+          dbPracticePcMap.set(`${m.practice}:${normPc}`, { mem: m, patient: pt });
+        }
+      }
+
+      // 3. PC in ANY practice -> Memberships & Patients Map (Cross-practice lookup)
+      const dbAllPcMap = new Map<string, Array<{ mem: typeof existingMemberships[0]; patient: typeof existingPatients[0] }>>();
+      for (const m of existingMemberships) {
+        const normPc = normalizeDigits(m.physicalFileNumber.trim()).replace(/\.0+$/, '');
+        const pt = existingPatients.find(p => p.id === m.patientId);
+        if (normPc && pt) {
+          const list = dbAllPcMap.get(normPc) || [];
+          list.push({ mem: m, patient: pt });
+          dbAllPcMap.set(normPc, list);
+        }
+      }
+
+      // 4. Name -> Patients Map
+      const dbNameMap = new Map<string, typeof existingPatients[0][]>();
+      for (const p of existingPatients) {
+        const normName = normalizePersianChars(normalizeDigits(p.name.trim()));
+        if (normName) {
+          const list = dbNameMap.get(normName) || [];
+          list.push(p);
+          dbNameMap.set(normName, list);
+        }
       }
 
       const batchId = `imp-batch-${Date.now()}`;
@@ -227,15 +256,31 @@ export async function excelImportRouter(fastify: FastifyInstance) {
 
       // Temporary maps to track in-file duplicates across rows
       const filePhoneMap = new Map<string, number>(); // phone -> first row
-      const filePcMap = new Map<string, number>(); // pc -> first row
+      const filePracticePcMap = new Map<string, number>(); // practice:pc -> first row
 
       let rowIndex = 0;
       worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         rowIndex++;
+
+        // Helper to extract string text from Cell regardless of cell type (text, number, formula object)
+        const getCellString = (cellIndex: number): string => {
+          const cell = row.getCell(cellIndex);
+          if (cell.value === null || cell.value === undefined) return '';
+          if (typeof cell.value === 'object') {
+            if ('result' in cell.value && cell.value.result !== undefined && cell.value.result !== null) {
+              return String(cell.value.result).trim();
+            }
+            if ('text' in cell.value && cell.value.text) {
+              return String(cell.value.text).trim();
+            }
+          }
+          return String(cell.value).trim();
+        };
+
         // Get raw values strictly by cell position: Cell 1 (A) = PC, Cell 2 (B) = Name, Cell 3 (C) = PN
-        const rawCellA = row.getCell(1).text ? String(row.getCell(1).text).trim() : '';
-        const rawCellB = row.getCell(2).text ? String(row.getCell(2).text).trim() : '';
-        const rawCellC = row.getCell(3).text ? String(row.getCell(3).text).trim() : '';
+        const rawCellA = getCellString(1);
+        const rawCellB = getCellString(2);
+        const rawCellC = getCellString(3);
 
         // Header detection heuristic for Row 1
         if (rowNumber === 1) {
@@ -254,9 +299,11 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         const rawName = rawCellB;
         const rawPhone = rawCellC;
 
-        const normalizedPc = normalizeDigits(rawPc);
-        const normalizedName = validatePersianName(rawName).normalized || normalizePersianChars(normalizeDigits(rawName));
-        const normalizedPhone = normalizeDigits(rawPhone);
+        const normalizedPc = normalizeDigits(rawPc).replace(/\.0+$/, '').trim();
+        const nameVal = validatePersianName(rawName, 'نام بیمار');
+        const normalizedName = nameVal.normalized || normalizePersianChars(normalizeDigits(rawName));
+        const phoneVal = validateIranianMobile(rawPhone);
+        const normalizedPhone = phoneVal.normalized;
 
         const issues: string[] = [];
         let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' = 'ready';
@@ -264,7 +311,6 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         let duplicateReason: string | null = null;
 
         // Validation 1: Name validation
-        const nameVal = validatePersianName(rawName, 'نام بیمار');
         if (!nameVal.isValid) {
           issues.push(nameVal.error || 'نام بیمار وارد نشده یا معتبر نیست');
         }
@@ -275,39 +321,64 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         }
 
         // Validation 3: Phone validation
-        const phoneVal = validateIranianMobile(rawPhone);
         if (!phoneVal.isValid) {
           issues.push(phoneVal.error || 'شماره همراه نامعتبر یا ناقص است');
         }
 
-        // Duplicate Check 1: Phone match against existing DB patient
-        if (normalizedPhone && phoneVal.isValid && phoneToPatientMap.has(normalizedPhone)) {
-          const matched = phoneToPatientMap.get(normalizedPhone)!;
+        // --- DUPLICATE & MATCH CHECKS (Database & In-File) ---
+
+        // Check 1: Mobile match against DB Patient (Match level: Important)
+        if (phoneVal.isValid && normalizedPhone && dbPhoneMap.has(normalizedPhone)) {
+          const matched = dbPhoneMap.get(normalizedPhone)!;
           duplicateTargetPatientId = matched.id;
-          duplicateReason = `شماره همراه ${normalizedPhone} قبلاً برای بیمار «${matched.name}» (پرونده ${matched.fileNumber}) ثبت شده است.`;
+          duplicateReason = `شماره همراه ${normalizedPhone} قبلاً برای بیمار «${matched.name}» (پرونده ${matched.fileNumber}) در سیستم ثبت شده است.`;
         }
 
-        // Duplicate Check 2: PC match in SAME practice against existing DB
-        if (normalizedPc && pcPracticeToMemMap.has(`${practice}:${normalizedPc}`)) {
-          const matchedMem = pcPracticeToMemMap.get(`${practice}:${normalizedPc}`)!;
-          const matchedPt = existingPatients.find(p => p.id === matchedMem.patientId);
-          duplicateTargetPatientId = matchedMem.patientId;
-          duplicateReason = `شماره پرونده فیزیکی ${normalizedPc} در مطب ${practice === 'dental' ? 'دندانپزشکی' : 'زیبایی'} قبلاً به بیمار «${matchedPt?.name || 'نامشخص'}» تخصیص داده شده است.`;
+        // Check 2: PC match in SAME practice against DB (Match level: High)
+        if (!duplicateReason && normalizedPc && dbPracticePcMap.has(`${practice}:${normalizedPc}`)) {
+          const matchedObj = dbPracticePcMap.get(`${practice}:${normalizedPc}`)!;
+          duplicateTargetPatientId = matchedObj.patient.id;
+          const practiceLabel = practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+          duplicateReason = `شماره پرونده فیزیکی ${normalizedPc} در مطب ${practiceLabel} قبلاً به بیمار «${matchedObj.patient.name}» تخصیص داده شده است.`;
         }
 
-        // Duplicate Check 3: Duplicate within the SAME Excel file
-        if (normalizedPhone && phoneVal.isValid && filePhoneMap.has(normalizedPhone)) {
+        // Check 3: PC match in ANOTHER practice in DB (Cross-practice PC match notice)
+        if (!duplicateReason && normalizedPc && dbAllPcMap.has(normalizedPc)) {
+          const allMatched = dbAllPcMap.get(normalizedPc)!;
+          const otherPracticeMatched = allMatched.find(item => item.mem.practice !== practice);
+          if (otherPracticeMatched) {
+            duplicateTargetPatientId = otherPracticeMatched.patient.id;
+            const otherPracticeLabel = otherPracticeMatched.mem.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+            duplicateReason = `شماره پرونده فیزیکی ${normalizedPc} در مطب ${otherPracticeLabel} متعلق به بیمار «${otherPracticeMatched.patient.name}» است (نیازمند بررسی).`;
+          }
+        }
+
+        // Check 4: Combined Name + Mobile match in DB
+        if (!duplicateReason && normalizedName && normalizedPhone && phoneVal.isValid) {
+          const nameMatchedPts = dbNameMap.get(normalizedName);
+          if (nameMatchedPts && nameMatchedPts.length > 0) {
+            const fullMatch = nameMatchedPts.find(p => normalizeIranianMobile(p.mobile) === normalizedPhone);
+            if (fullMatch) {
+              duplicateTargetPatientId = fullMatch.id;
+              duplicateReason = `نام «${fullMatch.name}» و شماره همراه ${normalizedPhone} با پرونده موجود در سیستم مطابقت دارد.`;
+            }
+          }
+        }
+
+        // Check 5: Duplicate Mobile within the SAME Excel file
+        if (!duplicateReason && phoneVal.isValid && normalizedPhone && filePhoneMap.has(normalizedPhone)) {
           const firstRow = filePhoneMap.get(normalizedPhone)!;
           duplicateReason = `شماره همراه ${normalizedPhone} در ردیف ${firstRow} همین فایل اکسل نیز وجود دارد.`;
-        } else if (normalizedPhone && phoneVal.isValid) {
+        } else if (phoneVal.isValid && normalizedPhone) {
           filePhoneMap.set(normalizedPhone, rowNumber);
         }
 
-        if (normalizedPc && filePcMap.has(`${practice}:${normalizedPc}`)) {
-          const firstRow = filePcMap.get(`${practice}:${normalizedPc}`)!;
+        // Check 6: Duplicate PC within the SAME Excel file
+        if (!duplicateReason && normalizedPc && filePracticePcMap.has(`${practice}:${normalizedPc}`)) {
+          const firstRow = filePracticePcMap.get(`${practice}:${normalizedPc}`)!;
           duplicateReason = `شماره پرونده ${normalizedPc} در ردیف ${firstRow} همین فایل اکسل تکرار شده است.`;
         } else if (normalizedPc) {
-          filePcMap.set(`${practice}:${normalizedPc}`, rowNumber);
+          filePracticePcMap.set(`${practice}:${normalizedPc}`, rowNumber);
         }
 
         // Determine Primary Category
@@ -675,6 +746,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
 
       return reply.send({
         success: true,
+        data: { id },
         message: 'دسته‌بندی اکسل با موفقیت حذف گردید'
       });
     } catch (error) {

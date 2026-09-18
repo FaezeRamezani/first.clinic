@@ -70,20 +70,46 @@ export function validatePersianName(name: string | null | undefined, fieldLabel:
 }
 
 /**
- * Validates Iranian Mobile Number
- * - Exactly 11 digits
- * - Starts with '09'
- * - Normalizes Persian digits to English
- * - Max length input: 11 digits
+ * Normalizes Iranian Mobile Number
+ * - Fixes 10-digit numbers starting with 9 by prepending 0 (e.g. 9151234567 -> 09151234567)
+ * - Converts 989... (12 digits) to 09...
+ * - Handles numeric inputs from Excel (removing decimals like .0)
+ * - Normalizes Persian/Arabic digits to English digits
  */
-export function validateIranianMobile(mobile: string | null | undefined): { isValid: boolean; normalized: string; error?: string } {
-  if (!mobile || !mobile.trim()) {
+export function normalizeIranianMobile(mobile: string | number | null | undefined): string {
+  if (mobile === null || mobile === undefined) return '';
+
+  let str = mobile.toString().trim();
+  str = str.replace(/\.0+$/, '');
+  str = normalizeDigits(str);
+
+  const digitsOnly = str.replace(/\D/g, '');
+
+  if (digitsOnly.length === 10 && digitsOnly.startsWith('9')) {
+    return '0' + digitsOnly;
+  }
+
+  if (digitsOnly.length === 12 && digitsOnly.startsWith('989')) {
+    return '0' + digitsOnly.slice(2);
+  }
+
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('09')) {
+    return digitsOnly;
+  }
+
+  return digitsOnly;
+}
+
+/**
+ * Validates Iranian Mobile Number
+ */
+export function validateIranianMobile(mobile: string | number | null | undefined): { isValid: boolean; normalized: string; error?: string } {
+  if (mobile === null || mobile === undefined || mobile === '') {
     return { isValid: false, normalized: '', error: 'شماره موبایل الزامی است' };
   }
 
-  const normalized = normalizeDigits(mobile.trim());
+  const normalized = normalizeIranianMobile(mobile);
 
-  // Strictly 11 digits starting with 09
   const mobileRegex = /^09\d{9}$/;
   if (!mobileRegex.test(normalized)) {
     return {

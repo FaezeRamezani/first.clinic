@@ -66,17 +66,17 @@ export const initialDoctors: Doctor[] = [
 export const initialPaymentAccounts: PaymentAccount[] = [
   { id: 'acc-1', name: 'بانک ایران زمین', practice: 'aesthetic' },
   { id: 'acc-2', name: 'بانک رفاه', practice: 'aesthetic' },
-  { id: 'acc-3', name: 'کارتخوان بانک سامان (مطب زیبایی)', practice: 'aesthetic' },
+  { id: 'acc-3', name: 'کارتخوان', practice: 'aesthetic' },
   { id: 'acc-4', name: 'شیخ فضل‌الله (مجتبی)', practice: 'aesthetic' },
   { id: 'acc-5', name: 'شیخ فضل‌الله (حسین)', practice: 'aesthetic' },
   { id: 'acc-6', name: 'شیخ فضل‌الله (احمد)', practice: 'aesthetic' },
   { id: 'acc-7', name: 'بانک سپه', practice: 'aesthetic' },
   { id: 'acc-8', name: 'بانک تجارت', practice: 'aesthetic' },
   { id: 'acc-9', name: 'بانک ملی', practice: 'aesthetic' },
-  { id: 'acc-10', name: 'نقد (مطب زیبایی)', practice: 'aesthetic' },
-  { id: 'acc-11', name: 'کارتخوان بانک پاسارگاد (مطب دندانپزشکی)', practice: 'dental' },
+  { id: 'acc-10', name: 'نقد', practice: 'aesthetic' },
+  { id: 'acc-11', name: 'کارتخوان', practice: 'dental' },
   { id: 'acc-12', name: 'کارت به کارت (بانک ایران زمین)', practice: 'dental' },
-  { id: 'acc-13', name: 'نقد (مطب دندانپزشکی)', practice: 'dental' }
+  { id: 'acc-13', name: 'نقد', practice: 'dental' }
 ];
 
 export const initialServices: ServiceItem[] = [
