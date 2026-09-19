@@ -172,7 +172,7 @@ export const ExcelImportView: React.FC = () => {
   // Final Commit Action
   const handleFinalCommit = async () => {
     if (!activeBatch) return;
-    const confirmMsg = `آیا از ورود نهایی رکوردهای معتبر به دیتابیس اصلی کلینیک اطمینان دارید؟\nاین عملیات رکوردهای مجاز را به عنوان «پرونده‌های ناقص» وارد سیستم می‌کند.`;
+    const confirmMsg = `آیا از ورود نهایی رکوردهای معتبر به دیتابیس اصلی کلینیک اطمینان دارید؟\nاین عملیات رکوردهای معتبر را به عنوان «پرونده‌های بیماران» وارد سیستم می‌کند.`;
     if (!window.confirm(confirmMsg)) return;
 
     setIsCommitting(true);
@@ -202,34 +202,6 @@ export const ExcelImportView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-16">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl shadow-xl border border-indigo-900/40 relative overflow-hidden">
-        <div className="absolute -left-10 -bottom-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-400/30 text-indigo-300">
-                <FileSpreadsheet className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-black">ورود اطلاعات بیماران از Excel</h2>
-            </div>
-            <p className="text-xs text-slate-300 font-medium pt-1 max-w-2xl leading-relaxed">
-              بارگذاری فایل‌های اکسل بیماران قدیمی کلینیک، بررسی و اعتبارسنجی خودکار بر اساس موقعیت ستون‌ها (A=شماره پرونده، B=نام بیمار، C=شماره همراه) بدون آلوده‌سازی دیتابیس اصلی.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => loadBatches()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-700/50 rounded-xl text-xs font-bold text-indigo-200 transition-colors cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>بروزرسانی لیست</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Upload Form Box */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-5">
         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">

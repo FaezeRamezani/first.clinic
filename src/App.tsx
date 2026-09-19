@@ -22,15 +22,11 @@ import { CancelAppointmentModal } from './components/modals/CancelAppointmentMod
 
 import { PatientDetailModal } from './components/patients/PatientDetailModal';
 
-import { IncompletePatientCredentialsModal } from './components/modals/IncompletePatientCredentialsModal';
-
 const MainContent: React.FC = () => {
   const { 
     activeView, 
     selectedPatient, 
-    setSelectedPatient,
-    createdIncompletePatientModal,
-    setCreatedIncompletePatientModal
+    setSelectedPatient
   } = useClinic();
 
   const renderActiveView = () => {
@@ -77,14 +73,6 @@ const MainContent: React.FC = () => {
         <PatientDetailModal
           patient={selectedPatient}
           onClose={() => setSelectedPatient(null)}
-        />
-      )}
-
-      {/* Incomplete Patient Credentials Modal */}
-      {createdIncompletePatientModal && (
-        <IncompletePatientCredentialsModal
-          patient={createdIncompletePatientModal}
-          onClose={() => setCreatedIncompletePatientModal(null)}
         />
       )}
 

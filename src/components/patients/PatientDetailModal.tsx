@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useClinic, hasPracticeMembership, getPhysicalFileNumber } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
-import { validatePhysicalFileNumber } from '../../utils/validation';
+import { validatePhysicalFileNumber, validatePersianName, validateIranianMobile, validateIranianNationalId } from '../../utils/validation';
+import { patientsApi } from '../../services/api';
 import { 
   X, 
   User, 
@@ -13,7 +14,9 @@ import {
   UploadCloud,
   Edit2,
   Save,
-  Filter
+  Filter,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import type { Patient } from '../../types';
 
@@ -23,7 +26,7 @@ interface PatientDetailModalProps {
 }
 
 export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient, onClose }) => {
-  const { patients, appointments, transactions, openPaymentCollection, openNewAppointment, updatePhysicalFileNumber } = useClinic();
+  const { patients, appointments, transactions, openPaymentCollection, openNewAppointment, refreshPatients } = useClinic();
 
   // Always derive fresh patient from context state so balance & profile data is 100% reactive
   const currentPatient = patients.find(p => p.id === patient.id) || patient;
@@ -38,11 +41,105 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
   const [activeTab, setActiveTab] = useState<'basic' | 'appointments' | 'ledger' | 'treatments'>('ledger');
   const [newDoctorNote, setNewDoctorNote] = useState<string>('');
 
-  // Editable Physical File Numbers State
-  const [editingDentalFile, setEditingDentalFile] = useState<boolean>(false);
-  const [dentalFileValue, setDentalFileValue] = useState<string>('');
-  const [editingAestheticFile, setEditingAestheticFile] = useState<boolean>(false);
-  const [aestheticFileValue, setAestheticFileValue] = useState<string>('');
+  // Draft Edit State for Personal Info & Practice File Numbers
+  const [isEditingPersonal, setIsEditingPersonal] = useState<boolean>(false);
+  const [draftName, setDraftName] = useState<string>('');
+  const [draftMobile, setDraftMobile] = useState<string>('');
+  const [draftNationalId, setDraftNationalId] = useState<string>('');
+  const [draftBirthDate, setDraftBirthDate] = useState<string>('');
+  const [draftGender, setDraftGender] = useState<'female' | 'male' | ''>('');
+  const [draftDentalFile, setDraftDentalFile] = useState<string>('');
+  const [draftAestheticFile, setDraftAestheticFile] = useState<string>('');
+  const [draftMedicalNotes, setDraftMedicalNotes] = useState<string>('');
+  const [draftEmergencyName, setDraftEmergencyName] = useState<string>('');
+  const [draftEmergencyPhone, setDraftEmergencyPhone] = useState<string>('');
+  const [draftEmergencyRelation, setDraftEmergencyRelation] = useState<string>('');
+  const [isSavingPersonal, setIsSavingPersonal] = useState<boolean>(false);
+
+  const startEditingPersonal = () => {
+    setDraftName(currentPatient.name || '');
+    setDraftMobile(currentPatient.mobile || '');
+    setDraftNationalId(currentPatient.nationalId || '');
+    setDraftBirthDate(currentPatient.birthDate || '');
+    setDraftGender(currentPatient.gender || '');
+    setDraftDentalFile(getPhysicalFileNumber(currentPatient, 'dental'));
+    setDraftAestheticFile(getPhysicalFileNumber(currentPatient, 'aesthetic'));
+    setDraftMedicalNotes(currentPatient.medicalNotes || '');
+    setDraftEmergencyName(currentPatient.emergencyContact?.name || '');
+    setDraftEmergencyPhone(currentPatient.emergencyContact?.phone || '');
+    setDraftEmergencyRelation(currentPatient.emergencyContact?.relation || '');
+    setIsEditingPersonal(true);
+  };
+
+  const cancelEditingPersonal = () => {
+    setIsEditingPersonal(false);
+  };
+
+  const saveEditingPersonal = async () => {
+    const nameVal = validatePersianName(draftName, 'نام بیمار');
+    if (!nameVal.isValid) {
+      alert(nameVal.error);
+      return;
+    }
+    const mobileVal = validateIranianMobile(draftMobile);
+    if (!mobileVal.isValid) {
+      alert(mobileVal.error);
+      return;
+    }
+    if (draftNationalId && draftNationalId.trim()) {
+      const natVal = validateIranianNationalId(draftNationalId, true);
+      if (!natVal.isValid) {
+        alert(natVal.error);
+        return;
+      }
+    }
+
+    setIsSavingPersonal(true);
+    try {
+      // 1. Update patient personal info
+      await patientsApi.updatePatient(currentPatient.id, {
+        name: nameVal.normalized,
+        mobile: mobileVal.normalized,
+        nationalId: draftNationalId.trim() || null,
+        birthDate: draftBirthDate.trim() || null,
+        gender: (draftGender as any) || null,
+        medicalNotes: draftMedicalNotes.trim() || null,
+        emergencyContact: {
+          name: draftEmergencyName.trim() || null,
+          phone: draftEmergencyPhone.trim() || null,
+          relation: draftEmergencyRelation.trim() || null
+        }
+      });
+
+      // 2. Update physical file numbers if changed
+      if (hasDental && draftDentalFile.trim() !== getPhysicalFileNumber(currentPatient, 'dental')) {
+        const val = validatePhysicalFileNumber(draftDentalFile, false);
+        if (!val.isValid) {
+          alert(`خطا در شماره پرونده دندانپزشکی: ${val.error}`);
+          setIsSavingPersonal(false);
+          return;
+        }
+        await patientsApi.updatePhysicalFileNumber(currentPatient.id, 'dental', val.normalized);
+      }
+
+      if (hasAesthetic && draftAestheticFile.trim() !== getPhysicalFileNumber(currentPatient, 'aesthetic')) {
+        const val = validatePhysicalFileNumber(draftAestheticFile, false);
+        if (!val.isValid) {
+          alert(`خطا در شماره پرونده زیبایی: ${val.error}`);
+          setIsSavingPersonal(false);
+          return;
+        }
+        await patientsApi.updatePhysicalFileNumber(currentPatient.id, 'aesthetic', val.normalized);
+      }
+
+      await refreshPatients();
+      setIsEditingPersonal(false);
+    } catch (err: any) {
+      alert(err.message || 'خطا در ویرایش اطلاعات بیمار');
+    } finally {
+      setIsSavingPersonal(false);
+    }
+  };
 
   // Filter patient specific data based on chosen detailScope
   const patientAppointments = appointments.filter(a => {
@@ -290,206 +387,285 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
           )}
 
           {/* TAB 2: Basic Info & Editable Physical File Numbers */}
-          {activeTab === 'basic' && (() => {
-            const isIncomplete = currentPatient.profileStatus === 'incomplete';
-            const isNationalIdMissing = isIncomplete && !currentPatient.nationalId;
-            const isBirthDateMissing = isIncomplete && !currentPatient.birthDate;
-            const isEmergencyContactMissing = isIncomplete && (!currentPatient.emergencyContact || !currentPatient.emergencyContact.name);
-            const isAllergiesMissing = isIncomplete && (!currentPatient.allergies || currentPatient.allergies.length === 0);
-            const isMedicalNotesMissing = isIncomplete && !currentPatient.medicalNotes;
-
-            return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700">
-                
-                {/* Left Column: Personal Info & Editable File Numbers */}
-                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <h3 className="font-bold text-sm text-slate-800 border-b border-slate-200 pb-2">اطلاعات فردی و شماره پرونده‌های فیزیکی</h3>
-                  
-                  <p className="py-1">
-                    نام و نام خانوادگی: <strong className="text-slate-900">{currentPatient.name}</strong>
-                  </p>
-
-                  <p className="py-1">
-                    شناسه داخلی سیستم: <strong className="text-indigo-600 font-mono">{currentPatient.id}</strong>
-                  </p>
-
-                  {/* EDITABLE DENTAL PHYSICAL FILE NUMBER */}
-                  {hasDental && (
-                    <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200">
-                      <div>
-                        <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی دندانپزشکی: </span>
-                        {editingDentalFile ? (
-                          <input
-                            type="text"
-                            value={dentalFileValue}
-                            onChange={(e) => setDentalFileValue(e.target.value)}
-                            className="bg-slate-100 border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-24 outline-none focus:border-teal-500"
-                          />
-                        ) : (
-                          <strong className="text-teal-700 font-bold text-sm dir-ltr inline-block">
-                            {getPhysicalFileNumber(currentPatient, 'dental') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'dental')) : 'ثبت نشده'}
-                          </strong>
-                        )}
-                      </div>
-                      {editingDentalFile ? (
-                        <button
-                          onClick={() => {
-                            const val = validatePhysicalFileNumber(dentalFileValue, false);
-                            if (!val.isValid) {
-                              alert(val.error || 'شماره پرونده معتبر نیست');
-                              return;
-                            }
-                            updatePhysicalFileNumber(currentPatient.id, 'dental', val.normalized);
-                            setEditingDentalFile(false);
-                          }}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>ذخیره</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setDentalFileValue(getPhysicalFileNumber(currentPatient, 'dental'));
-                            setEditingDentalFile(true);
-                          }}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>ویرایش</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* EDITABLE AESTHETIC PHYSICAL FILE NUMBER */}
-                  {hasAesthetic && (
-                    <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200">
-                      <div>
-                        <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی زیبایی: </span>
-                        {editingAestheticFile ? (
-                          <input
-                            type="text"
-                            value={aestheticFileValue}
-                            onChange={(e) => setAestheticFileValue(e.target.value)}
-                            className="bg-slate-100 border border-slate-300 rounded px-2 py-0.5 text-xs font-bold text-slate-800 w-24 outline-none focus:border-purple-500"
-                          />
-                        ) : (
-                          <strong className="text-purple-700 font-bold text-sm dir-ltr inline-block">
-                            {getPhysicalFileNumber(currentPatient, 'aesthetic') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'aesthetic')) : 'ثبت نشده'}
-                          </strong>
-                        )}
-                      </div>
-                      {editingAestheticFile ? (
-                        <button
-                          onClick={() => {
-                            const val = validatePhysicalFileNumber(aestheticFileValue, false);
-                            if (!val.isValid) {
-                              alert(val.error || 'شماره پرونده معتبر نیست');
-                              return;
-                            }
-                            updatePhysicalFileNumber(currentPatient.id, 'aesthetic', val.normalized);
-                            setEditingAestheticFile(false);
-                          }}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>ذخیره</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setAestheticFileValue(getPhysicalFileNumber(currentPatient, 'aesthetic'));
-                            setEditingAestheticFile(true);
-                          }}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>ویرایش</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <div className={`p-2.5 rounded-xl transition-all ${
-                    isNationalIdMissing ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900' : 'py-1'
-                  }`}>
-                    <span>کد ملی: </span>
-                    <strong className={isNationalIdMissing ? 'text-amber-800 font-bold' : 'text-slate-800'}>
-                      {currentPatient.nationalId ? toFarsiDigits(currentPatient.nationalId) : 'ثبت نشده'}
-                    </strong>
-                  </div>
-
-                  <p className="py-1">
-                    شماره موبایل: <strong>{toFarsiDigits(currentPatient.mobile)}</strong>
-                  </p>
-
-                  <div className={`p-2.5 rounded-xl transition-all ${
-                    isBirthDateMissing ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900' : 'py-1'
-                  }`}>
-                    <span>تاریخ تولد: </span>
-                    <strong className={isBirthDateMissing ? 'text-amber-800 font-bold' : 'text-slate-800'}>
-                      {currentPatient.birthDate ? formatJalaliDateDisplay(currentPatient.birthDate) : 'ثبت نشده'}
-                    </strong>
-                  </div>
-
-                  <p className="py-1">
-                    تاریخ تشکیل پرونده: <strong>{currentPatient.createdAt ? formatJalaliDateDisplay(currentPatient.createdAt) : '-'}</strong>
+          {activeTab === 'basic' && (
+            <div className="space-y-4">
+              {/* Header Action Bar for Edit Mode */}
+              <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-800 flex items-center gap-2">
+                    <User className="w-4 h-4 text-indigo-600" />
+                    <span>اطلاعات فردی و شماره پرونده‌های فیزیکی</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    {isEditingPersonal 
+                      ? 'در حال ویرایش مسوده (Draft) اطلاعات بیمار. برای ثبت نهایی روی ذخیره کلیک کنید.' 
+                      : 'مشاهده مشخصات بیمار و پرونده‌های فیزیکی اختصاص داده شده در مطب‌ها'}
                   </p>
                 </div>
 
-                {/* Right Column: Medical Notes & Contacts */}
-                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                  <h3 className="font-bold text-sm text-slate-800 border-b border-slate-200 pb-2">اطلاعات اضطراری و حساسیت‌ها</h3>
+                <div>
+                  {isEditingPersonal ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={saveEditingPersonal}
+                        disabled={isSavingPersonal}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>{isSavingPersonal ? 'در حال ذخیره...' : 'ذخیره تغییرات (Save)'}</span>
+                      </button>
+
+                      <button
+                        onClick={cancelEditingPersonal}
+                        disabled={isSavingPersonal}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <RotateCcw className="w-4 h-4 text-slate-500" />
+                        <span>انصراف (Cancel)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={startEditingPersonal}
+                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Edit2 className="w-4 h-4 text-indigo-600" />
+                      <span>ویرایش اطلاعات پرونده</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {isEditingPersonal ? (
+                /* DRAFT EDIT FORM */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700 bg-white p-5 rounded-2xl border border-indigo-200 shadow-2xs">
                   
-                  <div className={`p-2.5 rounded-xl transition-all ${
-                    isEmergencyContactMissing ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900' : 'py-1'
-                  }`}>
-                    <span>تماس اضطراری: </span>
-                    <strong className={isEmergencyContactMissing ? 'text-amber-800 font-bold' : 'text-slate-800'}>
-                      {currentPatient.emergencyContact && currentPatient.emergencyContact.name ? (
-                        `${currentPatient.emergencyContact.name} (${currentPatient.emergencyContact.relation || '-'}) - ${toFarsiDigits(currentPatient.emergencyContact.phone)}`
-                      ) : (
-                        'ثبت نشده'
-                      )}
-                    </strong>
-                  </div>
-                  
-                  <div className={`p-2.5 rounded-xl transition-all ${
-                    isAllergiesMissing ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900' : ''
-                  }`}>
-                    <span className="font-bold block mb-1 text-slate-800">حساسیت‌های دارویی / پزشکی:</span>
-                    {currentPatient.allergies && currentPatient.allergies.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {currentPatient.allergies.map((alg, idx) => (
-                          <span key={idx} className="px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg font-bold text-[11px] flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" /> {alg}
-                          </span>
-                        ))}
+                  {/* Left Column: Personal Info Inputs */}
+                  <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <h4 className="font-bold text-xs text-indigo-900 border-b border-slate-200 pb-2">ویرایش مشخصات فردی</h4>
+                    
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">نام و نام خانوادگی بیمار:</label>
+                      <input
+                        type="text"
+                        value={draftName}
+                        onChange={(e) => setDraftName(e.target.value)}
+                        placeholder="نام و نام خانوادگی..."
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">شماره همراه (موبایل):</label>
+                      <input
+                        type="text"
+                        value={draftMobile}
+                        onChange={(e) => setDraftMobile(e.target.value)}
+                        placeholder="09123456789"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 dir-ltr text-right"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">کد ملی (۱۰ رقم):</label>
+                      <input
+                        type="text"
+                        value={draftNationalId}
+                        onChange={(e) => setDraftNationalId(e.target.value)}
+                        placeholder="کد ملی ۱۰ رقمی..."
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 dir-ltr text-right"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">تاریخ تولد (هجری شمسی):</label>
+                      <input
+                        type="text"
+                        value={draftBirthDate}
+                        onChange={(e) => setDraftBirthDate(e.target.value)}
+                        placeholder="مثال: 1370/05/12"
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 dir-ltr text-right"
+                      />
+                    </div>
+
+                    {hasDental && (
+                      <div>
+                        <label className="block font-bold text-teal-800 mb-1">شماره پرونده فیزیکی دندانپزشکی:</label>
+                        <input
+                          type="text"
+                          value={draftDentalFile}
+                          onChange={(e) => setDraftDentalFile(e.target.value)}
+                          placeholder="شماره پرونده دندانپزشکی..."
+                          className="w-full bg-white border border-teal-300 rounded-xl px-3 py-2 text-xs font-bold text-teal-900 outline-none focus:border-teal-500"
+                        />
                       </div>
-                    ) : (
-                      <span className={isAllergiesMissing ? 'text-amber-800 font-bold block' : 'text-slate-400 block'}>
-                        هیچ حساسیتی ثبت نشده است
-                      </span>
+                    )}
+
+                    {hasAesthetic && (
+                      <div>
+                        <label className="block font-bold text-purple-800 mb-1">شماره پرونده فیزیکی زیبایی:</label>
+                        <input
+                          type="text"
+                          value={draftAestheticFile}
+                          onChange={(e) => setDraftAestheticFile(e.target.value)}
+                          placeholder="شماره پرونده زیبایی..."
+                          className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs font-bold text-purple-900 outline-none focus:border-purple-500"
+                        />
+                      </div>
                     )}
                   </div>
 
-                  <div className={`p-2.5 rounded-xl transition-all ${
-                    isMedicalNotesMissing ? 'bg-amber-50/80 border border-amber-200/80 text-amber-900' : ''
-                  }`}>
-                    <span className="font-bold block mb-1 text-slate-800">یادداشت سوابق پزشکی:</span>
-                    <p className={`p-2.5 rounded-xl leading-relaxed ${
-                      isMedicalNotesMissing 
-                        ? 'bg-white/80 border border-amber-200 text-amber-900 font-semibold' 
-                        : 'bg-white border border-slate-200 text-slate-600'
-                    }`}>
-                      {currentPatient.medicalNotes || 'توضیحات خاصی ثبت نشده است.'}
+                  {/* Right Column: Medical Notes & Emergency Contact Inputs */}
+                  <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <h4 className="font-bold text-xs text-indigo-900 border-b border-slate-200 pb-2">تماس اضطراری و یادداشت پزشکی</h4>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">نام فرد تماس اضطراری:</label>
+                      <input
+                        type="text"
+                        value={draftEmergencyName}
+                        onChange={(e) => setDraftEmergencyName(e.target.value)}
+                        placeholder="نام تماس اضطراری..."
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">شماره تماس اضطراری:</label>
+                        <input
+                          type="text"
+                          value={draftEmergencyPhone}
+                          onChange={(e) => setDraftEmergencyPhone(e.target.value)}
+                          placeholder="شماره تماس..."
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 dir-ltr text-right"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">نسبت:</label>
+                        <input
+                          type="text"
+                          value={draftEmergencyRelation}
+                          onChange={(e) => setDraftEmergencyRelation(e.target.value)}
+                          placeholder="مثال: همسر / پدر"
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">یادداشت سوابق پزشکی:</label>
+                      <textarea
+                        rows={4}
+                        value={draftMedicalNotes}
+                        onChange={(e) => setDraftMedicalNotes(e.target.value)}
+                        placeholder="سوابق بیماری، توضیحات پزشکی یا آلرژی..."
+                        className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-800 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                /* NORMAL DISPLAY READ-ONLY VIEW */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-700">
+                  
+                  {/* Left Column: Personal Info & Practice File Numbers */}
+                  <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <h4 className="font-bold text-xs text-slate-800 border-b border-slate-200 pb-2">مشخصات هویتی و شماره پرونده‌ها</h4>
+                    
+                    <p className="py-1">
+                      نام و نام خانوادگی: <strong className="text-slate-900 font-extrabold">{currentPatient.name}</strong>
+                    </p>
+
+                    <p className="py-1">
+                      شناسه داخلی سیستم: <strong className="text-indigo-600 font-mono">{currentPatient.id}</strong>
+                    </p>
+
+                    {hasDental && (
+                      <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200">
+                        <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی دندانپزشکی: </span>
+                        <strong className="text-teal-700 font-bold text-sm dir-ltr inline-block">
+                          {getPhysicalFileNumber(currentPatient, 'dental') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'dental')) : 'ثبت نشده'}
+                        </strong>
+                      </div>
+                    )}
+
+                    {hasAesthetic && (
+                      <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200">
+                        <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی زیبایی: </span>
+                        <strong className="text-purple-700 font-bold text-sm dir-ltr inline-block">
+                          {getPhysicalFileNumber(currentPatient, 'aesthetic') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'aesthetic')) : 'ثبت نشده'}
+                        </strong>
+                      </div>
+                    )}
+
+                    <div className="py-1">
+                      <span>کد ملی: </span>
+                      <strong className="text-slate-800">
+                        {currentPatient.nationalId ? toFarsiDigits(currentPatient.nationalId) : 'ثبت نشده'}
+                      </strong>
+                    </div>
+
+                    <p className="py-1">
+                      شماره موبایل: <strong>{toFarsiDigits(currentPatient.mobile)}</strong>
+                    </p>
+
+                    <div className="py-1">
+                      <span>تاریخ تولد: </span>
+                      <strong className="text-slate-800">
+                        {currentPatient.birthDate ? formatJalaliDateDisplay(currentPatient.birthDate) : 'ثبت نشده'}
+                      </strong>
+                    </div>
+
+                    <p className="py-1">
+                      تاریخ تشکیل پرونده: <strong>{currentPatient.createdAt ? formatJalaliDateDisplay(currentPatient.createdAt) : '-'}</strong>
                     </p>
                   </div>
+
+                  {/* Right Column: Medical Notes & Contacts */}
+                  <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <h4 className="font-bold text-xs text-slate-800 border-b border-slate-200 pb-2">اطلاعات اضطراری و حساسیت‌ها</h4>
+                    
+                    <div className="py-1">
+                      <span>تماس اضطراری: </span>
+                      <strong className="text-slate-800">
+                        {currentPatient.emergencyContact && currentPatient.emergencyContact.name ? (
+                          `${currentPatient.emergencyContact.name} (${currentPatient.emergencyContact.relation || '-'}) - ${toFarsiDigits(currentPatient.emergencyContact.phone)}`
+                        ) : (
+                          'ثبت نشده'
+                        )}
+                      </strong>
+                    </div>
+                    
+                    <div>
+                      <span className="font-bold block mb-1 text-slate-800">حساسیت‌های دارویی / پزشکی:</span>
+                      {currentPatient.allergies && currentPatient.allergies.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {currentPatient.allergies.map((alg, idx) => (
+                            <span key={idx} className="px-2.5 py-1 bg-rose-100 text-rose-800 rounded-lg font-bold text-[11px] flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> {alg}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 block">
+                          هیچ حساسیتی ثبت نشده است
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="font-bold block mb-1 text-slate-800">یادداشت سوابق پزشکی:</span>
+                      <p className="p-2.5 rounded-xl leading-relaxed bg-white border border-slate-200 text-slate-600">
+                        {currentPatient.medicalNotes || 'توضیحات خاصی ثبت نشده است.'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
+              )}
+            </div>
+          )}
 
           {/* TAB 3: Appointment History */}
           {activeTab === 'appointments' && (

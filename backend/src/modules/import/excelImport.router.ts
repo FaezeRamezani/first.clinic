@@ -688,7 +688,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
                 allergies: '[]',
                 medicalNotes: null,
                 emergencyContact: null,
-                profileStatus: 'incomplete', // Incomplete profile status workflow
+                profileStatus: 'completed', // Complete profile status for valid imported patients
                 username: phone,
                 password: `cl-${Math.floor(100000 + Math.random() * 900000)}`,
                 createdAt: todayStr
@@ -714,9 +714,13 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           }
         }
 
-        // Mark batch as committed
+        // Check if all records in batch are committed
+        const remainingStaged = db.select().from(excelImportRecords).where(and(eq(excelImportRecords.batchId, id), eq(excelImportRecords.status, 'staged'))).all();
+        const batchStatus = remainingStaged.length === 0 ? 'committed' : 'partial';
+
+        // Update batch status
         db.update(excelImportBatches)
-          .set({ status: 'committed' })
+          .set({ status: batchStatus })
           .where(eq(excelImportBatches.id, id))
           .run();
       })();

@@ -538,28 +538,21 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         let createdPt: Patient;
         if (existingPatient) {
           createdPt = await patientsApi.updatePatient(existingPatient.id, {
-            profileStatus: 'incomplete'
+            profileStatus: 'completed'
           });
           await ensurePatientMembership(existingPatient.id, trxData.practice || 'aesthetic');
-          const freshPats = await patientsApi.getPatients();
-          const freshPt = freshPats.find(p => p.id === existingPatient.id) || createdPt;
-          setCreatedIncompletePatientModal(freshPt);
         } else {
           createdPt = await patientsApi.createPatient({
             name: trxData.patientName,
             mobile: mobileToUse,
             primaryPractice: trxData.practice || 'aesthetic',
-            profileStatus: 'incomplete',
+            profileStatus: 'completed',
             memberships: [{ practice: trxData.practice || 'aesthetic', physicalFileNumber: '' }]
           });
-          setCreatedIncompletePatientModal(createdPt);
         }
         finalPatientId = createdPt.id;
       } else if (existingPatient) {
         finalPatientId = existingPatient.id;
-        if (existingPatient.profileStatus === 'incomplete') {
-          setCreatedIncompletePatientModal(existingPatient);
-        }
       }
 
       let effectiveDueDate = trxData.debtDueDate;

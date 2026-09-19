@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Calendar, 
-  UserCheck, 
-  ChevronDown, 
-  Clock, 
+import {
+  Search,
+  Calendar,
+  UserCheck,
+  ChevronDown,
+  Clock,
   ShieldCheck
 } from 'lucide-react';
 import { useClinic } from '../../context/ClinicContext';
@@ -13,9 +13,9 @@ import { PracticeScopeDropdown } from '../common/PracticeScopeDropdown';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 
 export const TopBar: React.FC = () => {
-  const { 
-    userRole, 
-    setUserRole, 
+  const {
+    userRole,
+    setUserRole,
     setIsGlobalSearchOpen,
     dashboardDate,
     setDashboardDate
@@ -53,7 +53,7 @@ export const TopBar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-30 h-16 glass-header border-b border-slate-200 px-4 md:px-6 flex items-center justify-between shadow-xs">
-      
+
       {/* Right Side: Logo & Global Practice Scope Dropdown */}
       <div className="flex items-center gap-4">
         {/* Brand */}
@@ -68,7 +68,7 @@ export const TopBar: React.FC = () => {
         </div>
 
         {/* Global Synchronized Practice Selector Dropdown */}
-        <PracticeScopeDropdown labelPrefix="انتخاب حوزه:" />
+        <PracticeScopeDropdown labelPrefix="انتخاب مطب:" />
       </div>
 
       {/* Middle: Jalali Date Picker for Dashboard & Time Display */}
