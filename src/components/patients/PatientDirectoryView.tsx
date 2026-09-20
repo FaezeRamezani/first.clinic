@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useClinic, hasPracticeMembership, getPhysicalFileNumber, getPatientFileNumberDisplay } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits } from '../../utils/persianUtils';
-import { 
-  Search, 
-  Plus, 
-  Eye, 
-  CalendarPlus, 
-  CreditCard, 
-  Sparkles, 
+import {
+  Search,
+  Plus,
+  Eye,
+  CalendarPlus,
+  CreditCard,
+  Sparkles,
   Stethoscope,
   Users,
   Filter,
@@ -22,7 +22,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { PatientDetailModal } from './PatientDetailModal';
-import type { Patient, PracticeType } from '../../types';
+import type { PracticeType } from '../../types';
 
 type SortField = 'fileNumber' | 'name' | 'mobile' | 'nationalId' | 'balance';
 type SortDirection = 'asc' | 'desc';
@@ -40,12 +40,12 @@ const INITIAL_FILTERS: AppliedFilters = {
 };
 
 export const PatientDirectoryView: React.FC = () => {
-  const { 
-    scope, 
-    patients, 
-    setSelectedPatient, 
-    selectedPatient, 
-    setIsNewPatientOpen, 
+  const {
+    scope,
+    patients,
+    setSelectedPatient,
+    selectedPatient,
+    setIsNewPatientOpen,
     openNewAppointment,
     openPaymentCollection
   } = useClinic();
@@ -64,7 +64,7 @@ export const PatientDirectoryView: React.FC = () => {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(15);
+  const [pageSize] = useState<number>(15);
 
   const filterPanelRef = useRef<HTMLDivElement>(null);
 
@@ -83,9 +83,32 @@ export const PatientDirectoryView: React.FC = () => {
     };
   }, [isFilterOpen]);
 
+  // Prune local practice filters outside active Top Bar scope when scope changes
+  useEffect(() => {
+    if (scope !== 'unified') {
+      setAppliedFilters(prev => {
+        const valid = prev.practice.filter(p => p === scope);
+        if (valid.length === prev.practice.length) return prev;
+        return { ...prev, practice: valid as PracticeType[] };
+      });
+      setStagedFilters(prev => {
+        const valid = prev.practice.filter(p => p === scope);
+        if (valid.length === prev.practice.length) return prev;
+        return { ...prev, practice: valid as PracticeType[] };
+      });
+    }
+  }, [scope]);
+
   // Sync staged filters when opening panel
   const handleOpenFilterPanel = () => {
-    setStagedFilters(appliedFilters);
+    const currentPracticeFilters = scope !== 'unified'
+      ? appliedFilters.practice.filter(p => p === scope)
+      : appliedFilters.practice;
+
+    setStagedFilters({
+      ...appliedFilters,
+      practice: currentPracticeFilters
+    });
     setIsFilterOpen(prev => !prev);
   };
 
@@ -102,8 +125,8 @@ export const PatientDirectoryView: React.FC = () => {
       const hasMatchName = p.name.toLowerCase().includes(q);
       const hasMatchMobile = p.mobile.includes(q);
       const hasMatchFile = (p.fileNumber && p.fileNumber.toLowerCase().includes(q)) ||
-                           getPhysicalFileNumber(p, 'dental').includes(q) ||
-                           getPhysicalFileNumber(p, 'aesthetic').includes(q);
+        getPhysicalFileNumber(p, 'dental').includes(q) ||
+        getPhysicalFileNumber(p, 'aesthetic').includes(q);
       const hasMatchNational = p.nationalId && p.nationalId.includes(q);
       return hasMatchName || hasMatchMobile || hasMatchFile || hasMatchNational;
     });
@@ -125,7 +148,7 @@ export const PatientDirectoryView: React.FC = () => {
 
       // 2. Practice Membership Group (OR logic)
       if (appliedFilters.practice.length > 0) {
-        const matchesPractice = appliedFilters.practice.some(pType => 
+        const matchesPractice = appliedFilters.practice.some(pType =>
           hasPracticeMembership(patient, pType)
         );
         if (!matchesPractice) return false;
@@ -227,7 +250,7 @@ export const PatientDirectoryView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
-      
+
       {/* Header & Search / Filter Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
@@ -238,7 +261,7 @@ export const PatientDirectoryView: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          
+
           {/* Search Bar */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
@@ -250,7 +273,7 @@ export const PatientDirectoryView: React.FC = () => {
               className="bg-slate-50 border border-slate-200 rounded-xl pr-9 pl-4 py-1.5 text-xs font-semibold text-slate-800 outline-none w-64 focus:border-indigo-500 focus:bg-white transition-colors"
             />
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => handleSearchChange('')}
                 className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
               >
@@ -263,11 +286,10 @@ export const PatientDirectoryView: React.FC = () => {
           <div className="relative" ref={filterPanelRef}>
             <button
               onClick={handleOpenFilterPanel}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                activeFiltersCount > 0 || isFilterOpen
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeFiltersCount > 0 || isFilterOpen
                   ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs'
                   : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-              }`}
+                }`}
             >
               <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
               <span>فیلترها</span>
@@ -286,7 +308,7 @@ export const PatientDirectoryView: React.FC = () => {
                     <Filter className="w-4 h-4 text-indigo-600" />
                     <h3 className="text-xs font-bold text-slate-800">فیلتر پیشرفته پرونده‌ها</h3>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setIsFilterOpen(false)}
                     className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                   >
@@ -295,7 +317,7 @@ export const PatientDirectoryView: React.FC = () => {
                 </div>
 
                 <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
-                  
+
                   {/* Financial Status Filter Group */}
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 block mb-2">
@@ -311,11 +333,10 @@ export const PatientDirectoryView: React.FC = () => {
                         return (
                           <label
                             key={opt.id}
-                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-                              isChecked 
-                                ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900' 
+                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${isChecked
+                                ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900'
                                 : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700'
-                            }`}
+                              }`}
                           >
                             <span className={opt.color}>{opt.label}</span>
                             <input
@@ -337,39 +358,56 @@ export const PatientDirectoryView: React.FC = () => {
 
                   {/* Practice / Section Filter Group */}
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 block mb-2">
-                      عضویت در مطب / بخش:
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        عضویت در مطب / بخش:
+                      </label>
+                      {scope !== 'unified' && (
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                          محدود شده
+                        </span>
+                      )}
+                    </div>
                     <div className="space-y-1.5">
                       {[
                         { id: 'dental', label: 'دندانپزشکی', icon: Stethoscope, color: 'text-teal-700' },
                         { id: 'aesthetic', label: 'داخلی و زیبایی', icon: Sparkles, color: 'text-indigo-700' }
                       ].map(opt => {
                         const IconComp = opt.icon;
-                        const isChecked = stagedFilters.practice.includes(opt.id as PracticeType);
+                        const isOutsideScope = scope !== 'unified' && scope !== opt.id;
+                        const isChecked = stagedFilters.practice.includes(opt.id as PracticeType) && !isOutsideScope;
                         return (
                           <label
                             key={opt.id}
-                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-                              isChecked 
-                                ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900' 
-                                : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700'
-                            }`}
+                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold transition-colors ${isOutsideScope
+                                ? 'bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 select-none'
+                                : isChecked
+                                  ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-pointer'
+                                  : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700 cursor-pointer'
+                              }`}
+                            title={isOutsideScope ? 'این بخش خارج از محدوده مطب انتخاب‌شده در Top Bar است' : undefined}
                           >
                             <div className="flex items-center gap-1.5">
-                              <IconComp className={`w-3.5 h-3.5 ${opt.color}`} />
+                              <IconComp className={`w-3.5 h-3.5 ${isOutsideScope ? 'text-slate-400' : opt.color}`} />
                               <span>{opt.label}</span>
+                              {isOutsideScope && (
+                                <span className="text-[10px] text-slate-400 font-normal mr-1">
+                                  (خارج از Scope فعلی)
+                                </span>
+                              )}
                             </div>
                             <input
                               type="checkbox"
                               checked={isChecked}
+                              disabled={isOutsideScope}
                               onChange={(e) => {
+                                if (isOutsideScope) return;
                                 const nextPractices = e.target.checked
                                   ? [...stagedFilters.practice, opt.id as PracticeType]
                                   : stagedFilters.practice.filter(p => p !== opt.id);
                                 setStagedFilters({ ...stagedFilters, practice: nextPractices });
                               }}
-                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed"
                             />
                           </label>
                         );
@@ -426,7 +464,7 @@ export const PatientDirectoryView: React.FC = () => {
               negative: 'بالانس منفی'
             };
             return (
-              <span 
+              <span
                 key={st}
                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-lg text-xs font-bold shadow-2xs"
               >
@@ -447,7 +485,7 @@ export const PatientDirectoryView: React.FC = () => {
               aesthetic: 'داخلی و زیبایی'
             };
             return (
-              <span 
+              <span
                 key={p}
                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-lg text-xs font-bold shadow-2xs"
               >
@@ -502,7 +540,7 @@ export const PatientDirectoryView: React.FC = () => {
               {' '}
               ({sortDirection === 'asc' ? 'صعودی ↑' : 'نزولی ↓'})
             </span>
-            <button 
+            <button
               onClick={() => { setSortField(null); setSortDirection(null); }}
               className="text-slate-400 hover:text-rose-600 mr-1 cursor-pointer"
               title="حذف مرتب‌سازی"
@@ -519,9 +557,9 @@ export const PatientDirectoryView: React.FC = () => {
           <table className="w-full text-xs text-right">
             <thead>
               <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 select-none">
-                
+
                 {/* File Number Header */}
-                <th 
+                <th
                   onClick={() => handleSortClick('fileNumber')}
                   className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors group"
                 >
@@ -538,7 +576,7 @@ export const PatientDirectoryView: React.FC = () => {
                 </th>
 
                 {/* Patient Name Header */}
-                <th 
+                <th
                   onClick={() => handleSortClick('name')}
                   className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors group"
                 >
@@ -555,7 +593,7 @@ export const PatientDirectoryView: React.FC = () => {
                 </th>
 
                 {/* Mobile Header */}
-                <th 
+                <th
                   onClick={() => handleSortClick('mobile')}
                   className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors group"
                 >
@@ -572,7 +610,7 @@ export const PatientDirectoryView: React.FC = () => {
                 </th>
 
                 {/* National ID Header */}
-                <th 
+                <th
                   onClick={() => handleSortClick('nationalId')}
                   className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors group"
                 >
@@ -592,7 +630,7 @@ export const PatientDirectoryView: React.FC = () => {
                 <th className="py-3.5 px-4">عضویت در مطب‌ها</th>
 
                 {/* Balance Header */}
-                <th 
+                <th
                   onClick={() => handleSortClick('balance')}
                   className="py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-colors group"
                 >
@@ -636,7 +674,7 @@ export const PatientDirectoryView: React.FC = () => {
               ) : (
                 paginatedPatients.map((patient) => (
                   <tr key={patient.id} className="hover:bg-slate-50/80 transition-colors">
-                    
+
                     {/* File Number */}
                     <td className="py-3.5 px-4 font-bold text-indigo-600 dir-ltr text-right">
                       {toFarsiDigits(getPatientFileNumberDisplay(patient, scope))}
@@ -700,7 +738,7 @@ export const PatientDirectoryView: React.FC = () => {
                     {/* Actions */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        
+
                         <button
                           onClick={() => setSelectedPatient(patient)}
                           className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold shadow-2xs flex items-center gap-1 cursor-pointer"

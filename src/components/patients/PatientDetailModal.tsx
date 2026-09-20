@@ -13,7 +13,6 @@ import {
   Sparkles,
   UploadCloud,
   Edit2,
-  Save,
   Filter,
   Check,
   RotateCcw
@@ -100,14 +99,14 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
       await patientsApi.updatePatient(currentPatient.id, {
         name: nameVal.normalized,
         mobile: mobileVal.normalized,
-        nationalId: draftNationalId.trim() || null,
-        birthDate: draftBirthDate.trim() || null,
-        gender: (draftGender as any) || null,
-        medicalNotes: draftMedicalNotes.trim() || null,
+        nationalId: draftNationalId.trim() || undefined,
+        birthDate: draftBirthDate.trim() || undefined,
+        gender: (draftGender as any) || undefined,
+        medicalNotes: draftMedicalNotes.trim() || undefined,
         emergencyContact: {
-          name: draftEmergencyName.trim() || null,
-          phone: draftEmergencyPhone.trim() || null,
-          relation: draftEmergencyRelation.trim() || null
+          name: draftEmergencyName.trim() || undefined,
+          phone: draftEmergencyPhone.trim() || undefined,
+          relation: draftEmergencyRelation.trim() || undefined
         }
       });
 
