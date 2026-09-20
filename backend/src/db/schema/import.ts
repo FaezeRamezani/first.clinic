@@ -12,6 +12,7 @@ export const excelImportBatches = sqliteTable('excel_import_batches', {
   missingPcCount: integer('missing_pc_count').notNull().default(0),
   invalidPhoneCount: integer('invalid_phone_count').notNull().default(0),
   duplicateCount: integer('duplicate_count').notNull().default(0),
+  pcConflictCount: integer('pc_conflict_count').notNull().default(0),
 });
 
 export const excelImportRecords = sqliteTable('excel_import_records', {
@@ -25,7 +26,7 @@ export const excelImportRecords = sqliteTable('excel_import_records', {
   normalizedPc: text('normalized_pc'),
   normalizedName: text('normalized_name'),
   normalizedPhone: text('normalized_phone'),
-  category: text('category').notNull(), // 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate'
+  category: text('category').notNull(), // 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict'
   issues: text('issues').notNull().default('[]'), // JSON array string
   duplicateTargetPatientId: text('duplicate_target_patient_id'),
   duplicateTargetRecordId: text('duplicate_target_record_id'),

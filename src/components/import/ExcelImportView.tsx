@@ -195,6 +195,7 @@ export const ExcelImportView: React.FC = () => {
   const missingPcRecords = records.filter(r => r.category === 'missing_pc');
   const invalidPhoneRecords = records.filter(r => r.category === 'invalid_phone');
   const duplicateRecords = records.filter(r => r.category === 'duplicate');
+  const pcConflictRecords = records.filter(r => r.category === 'pc_conflict');
 
   const filteredRecords = activeCategoryTab === 'all'
     ? records
@@ -435,8 +436,8 @@ export const ExcelImportView: React.FC = () => {
             </div>
           </div>
 
-          {/* 5 Main Category Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* 6 Main Category Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             
             {/* Card 1: Ready */}
             <div
@@ -514,7 +515,7 @@ export const ExcelImportView: React.FC = () => {
               </p>
             </div>
 
-            {/* Card 5: Duplicate */}
+            {/* Card 5: Duplicate Patient */}
             <div
               onClick={() => setActiveCategoryTab('duplicate')}
               className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
@@ -533,6 +534,25 @@ export const ExcelImportView: React.FC = () => {
               </p>
             </div>
 
+            {/* Card 6: PC Conflict */}
+            <div
+              onClick={() => setActiveCategoryTab('pc_conflict')}
+              className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                activeCategoryTab === 'pc_conflict'
+                  ? 'bg-amber-600 text-white border-amber-700 shadow-md ring-2 ring-amber-500/20'
+                  : 'bg-amber-50/60 border-amber-200 text-amber-950 hover:bg-amber-100/70'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold">تعارض شماره پرونده</span>
+                <AlertTriangle className={`w-4 h-4 ${activeCategoryTab === 'pc_conflict' ? 'text-white' : 'text-amber-600'}`} />
+              </div>
+              <p className="text-xl font-black">{toFarsiDigits(pcConflictRecords.length)}</p>
+              <p className={`text-[10px] mt-1 ${activeCategoryTab === 'pc_conflict' ? 'text-amber-100' : 'text-amber-700'}`}>
+                تکراری در همین مطب
+              </p>
+            </div>
+
           </div>
 
           {/* Staging Data Table */}
@@ -546,6 +566,7 @@ export const ExcelImportView: React.FC = () => {
                   {activeCategoryTab === 'missing_pc' && 'نیازمند شماره پرونده'}
                   {activeCategoryTab === 'invalid_phone' && 'شماره‌های نیازمند پیگیری منشی'}
                   {activeCategoryTab === 'duplicate' && 'موارد مشکوک به تکراری'}
+                  {activeCategoryTab === 'pc_conflict' && 'تعارض شماره پرونده فیزیکی'}
                   {activeCategoryTab === 'all' && 'همه رکوردها'}
                 </span>
                 <span className="text-slate-400 font-normal">({toFarsiDigits(filteredRecords.length)} رکورد)</span>
@@ -626,6 +647,11 @@ export const ExcelImportView: React.FC = () => {
                               {r.category === 'ready' && (
                                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[10px] font-bold">
                                   ✓ آماده ورود
+                                </span>
+                              )}
+                              {r.category === 'pc_conflict' && (
+                                <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded-md text-[10px] font-extrabold">
+                                  ⚠ تعارض شماره پرونده فیزیکی
                                 </span>
                               )}
                               {r.issues && r.issues.length > 0 && (

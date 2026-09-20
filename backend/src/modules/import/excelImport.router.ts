@@ -28,7 +28,8 @@ function ensureImportTablesExist() {
       missing_name_count INTEGER NOT NULL DEFAULT 0,
       missing_pc_count INTEGER NOT NULL DEFAULT 0,
       invalid_phone_count INTEGER NOT NULL DEFAULT 0,
-      duplicate_count INTEGER NOT NULL DEFAULT 0
+      duplicate_count INTEGER NOT NULL DEFAULT 0,
+      pc_conflict_count INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS excel_import_records (
@@ -52,6 +53,12 @@ function ensureImportTablesExist() {
       status TEXT NOT NULL DEFAULT 'staged'
     );
   `);
+
+  try {
+    sqlite.exec(`ALTER TABLE excel_import_batches ADD COLUMN pc_conflict_count INTEGER NOT NULL DEFAULT 0;`);
+  } catch {
+    // Column already exists, ignore
+  }
 }
 
 function getNextGlobalFileNumber(): string {
@@ -202,7 +209,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
       // Existing DB data for comprehensive duplicate detection
       const existingPatients = db.select().from(patients).all();
       const existingMemberships = db.select().from(patientPracticeMemberships).all();
-      
+
       // 1. Phone -> Patient Map
       const dbPhoneMap = new Map<string, typeof existingPatients[0]>();
       for (const p of existingPatients) {
@@ -253,6 +260,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
       let missingPcCount = 0;
       let invalidPhoneCount = 0;
       let duplicateCount = 0;
+      let pcConflictCount = 0;
 
       // Temporary maps to track in-file duplicates across rows
       const filePhoneMap = new Map<string, number>(); // phone -> first row
@@ -306,9 +314,10 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         const normalizedPhone = phoneVal.normalized;
 
         const issues: string[] = [];
-        let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' = 'ready';
+        let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict' = 'ready';
         let duplicateTargetPatientId: string | null = null;
         let duplicateReason: string | null = null;
+        let pcConflictReason: string | null = null;
 
         // Validation 1: Name validation
         if (!nameVal.isValid) {
@@ -334,25 +343,6 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           duplicateReason = `شماره همراه ${normalizedPhone} قبلاً برای بیمار «${matched.name}» (پرونده ${matched.fileNumber}) در سیستم ثبت شده است.`;
         }
 
-        // Check 2: PC match in SAME practice against DB (Match level: High)
-        if (!duplicateReason && normalizedPc && dbPracticePcMap.has(`${practice}:${normalizedPc}`)) {
-          const matchedObj = dbPracticePcMap.get(`${practice}:${normalizedPc}`)!;
-          duplicateTargetPatientId = matchedObj.patient.id;
-          const practiceLabel = practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
-          duplicateReason = `شماره پرونده فیزیکی ${normalizedPc} در مطب ${practiceLabel} قبلاً به بیمار «${matchedObj.patient.name}» تخصیص داده شده است.`;
-        }
-
-        // Check 3: PC match in ANOTHER practice in DB (Cross-practice PC match notice)
-        if (!duplicateReason && normalizedPc && dbAllPcMap.has(normalizedPc)) {
-          const allMatched = dbAllPcMap.get(normalizedPc)!;
-          const otherPracticeMatched = allMatched.find(item => item.mem.practice !== practice);
-          if (otherPracticeMatched) {
-            duplicateTargetPatientId = otherPracticeMatched.patient.id;
-            const otherPracticeLabel = otherPracticeMatched.mem.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
-            duplicateReason = `شماره پرونده فیزیکی ${normalizedPc} در مطب ${otherPracticeLabel} متعلق به بیمار «${otherPracticeMatched.patient.name}» است (نیازمند بررسی).`;
-          }
-        }
-
         // Check 4: Combined Name + Mobile match in DB
         if (!duplicateReason && normalizedName && normalizedPhone && phoneVal.isValid) {
           const nameMatchedPts = dbNameMap.get(normalizedName);
@@ -373,18 +363,35 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           filePhoneMap.set(normalizedPhone, rowNumber);
         }
 
-        // Check 6: Duplicate PC within the SAME Excel file
-        if (!duplicateReason && normalizedPc && filePracticePcMap.has(`${practice}:${normalizedPc}`)) {
-          const firstRow = filePracticePcMap.get(`${practice}:${normalizedPc}`)!;
-          duplicateReason = `شماره پرونده ${normalizedPc} در ردیف ${firstRow} همین فایل اکسل تکرار شده است.`;
-        } else if (normalizedPc) {
-          filePracticePcMap.set(`${practice}:${normalizedPc}`, rowNumber);
+        // --- PC CONFLICT CHECKS (Same practice PC collisions) ---
+        if (normalizedPc) {
+          const practiceLabel = practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+          // Check DB for PC conflict in SAME practice
+          if (dbPracticePcMap.has(`${practice}:${normalizedPc}`)) {
+            const matchedObj = dbPracticePcMap.get(`${practice}:${normalizedPc}`)!;
+            // If PC belongs to a DIFFERENT patient (or duplicateTargetPatientId not set), mark PC Conflict
+            if (!duplicateTargetPatientId || duplicateTargetPatientId !== matchedObj.patient.id) {
+              pcConflictReason = `شماره پرونده فیزیکی ${normalizedPc} قبلاً در مطب ${practiceLabel} به یک پرونده دیگر («${matchedObj.patient.name}») اختصاص داده شده است.`;
+            }
+          }
+
+          // Check duplicate PC within the SAME Excel file
+          if (!pcConflictReason && filePracticePcMap.has(`${practice}:${normalizedPc}`)) {
+            const firstRow = filePracticePcMap.get(`${practice}:${normalizedPc}`)!;
+            pcConflictReason = `شماره پرونده ${normalizedPc} در ردیف ${firstRow} همین فایل اکسل تکرار شده است.`;
+          } else if (!pcConflictReason) {
+            filePracticePcMap.set(`${practice}:${normalizedPc}`, rowNumber);
+          }
         }
 
         // Determine Primary Category
         if (duplicateReason || duplicateTargetPatientId) {
           category = 'duplicate';
           duplicateCount++;
+        } else if (pcConflictReason) {
+          category = 'pc_conflict';
+          issues.push(pcConflictReason);
+          pcConflictCount++;
         } else if (!phoneVal.isValid) {
           category = 'invalid_phone';
           invalidPhoneCount++;
@@ -415,7 +422,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           issues: JSON.stringify(issues),
           duplicateTargetPatientId,
           duplicateTargetRecordId: null,
-          duplicateReason,
+          duplicateReason: duplicateReason || pcConflictReason,
           duplicateResolution: 'unresolved',
           importedPatientId: null,
           status: 'staged'
@@ -437,7 +444,8 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           missingNameCount,
           missingPcCount,
           invalidPhoneCount,
-          duplicateCount
+          duplicateCount,
+          pcConflictCount
         }).run();
 
         if (stagingRecords.length > 0) {
@@ -459,7 +467,8 @@ export async function excelImportRouter(fastify: FastifyInstance) {
             missingNameCount,
             missingPcCount,
             invalidPhoneCount,
-            duplicateCount
+            duplicateCount,
+            pcConflictCount
           }
         }
       });
@@ -491,7 +500,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
       const newRawName = body.rawName !== undefined ? body.rawName : record.rawName || '';
       const newRawPhone = body.rawPhone !== undefined ? body.rawPhone : record.rawPhone || '';
 
-      const normalizedPc = normalizeDigits(newRawPc);
+      const normalizedPc = normalizeDigits(newRawPc).replace(/\.0+$/, '').trim();
       const normalizedName = validatePersianName(newRawName).normalized || normalizePersianChars(normalizeDigits(newRawName));
       const normalizedPhone = normalizeDigits(newRawPhone);
 
@@ -505,14 +514,32 @@ export async function excelImportRouter(fastify: FastifyInstance) {
       const phoneVal = validateIranianMobile(newRawPhone);
       if (!phoneVal.isValid) issues.push(phoneVal.error || 'شماره همراه نامعتبر یا ناقص است');
 
-      let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' = record.category as any;
+      let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict' = record.category as any;
 
       // Recalculate category if not resolving duplicate
       if (category !== 'duplicate' || record.duplicateResolution === 'separate_different_person') {
-        if (!phoneVal.isValid) category = 'invalid_phone';
-        else if (!nameVal.isValid) category = 'missing_name';
-        else if (!normalizedPc) category = 'missing_pc';
-        else category = 'ready';
+        const existingPcMem = normalizedPc ? db.select()
+          .from(patientPracticeMemberships)
+          .where(and(
+            eq(patientPracticeMemberships.practice, record.practice),
+            eq(patientPracticeMemberships.physicalFileNumber, normalizedPc)
+          ))
+          .get() : null;
+
+        if (existingPcMem) {
+          category = 'pc_conflict';
+          const ptName = db.select().from(patients).where(eq(patients.id, existingPcMem.patientId)).get()?.name || '';
+          const practiceLabel = record.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+          issues.push(`شماره پرونده فیزیکی ${normalizedPc} قبلاً در مطب ${practiceLabel} به یک پرونده دیگر${ptName ? ` («${ptName}»)` : ''} اختصاص داده شده است.`);
+        } else if (!phoneVal.isValid) {
+          category = 'invalid_phone';
+        } else if (!nameVal.isValid) {
+          category = 'missing_name';
+        } else if (!normalizedPc) {
+          category = 'missing_pc';
+        } else {
+          category = 'ready';
+        }
       }
 
       db.update(excelImportRecords)
@@ -569,10 +596,26 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         // Re-evaluate if valid
         const nameVal = validatePersianName(record.rawName);
         const phoneVal = validateIranianMobile(record.rawPhone);
-        if (!phoneVal.isValid) newCategory = 'invalid_phone';
-        else if (!nameVal.isValid) newCategory = 'missing_name';
-        else if (!record.normalizedPc) newCategory = 'missing_pc';
-        else newCategory = 'ready';
+
+        const existingPcMem = record.normalizedPc ? db.select()
+          .from(patientPracticeMemberships)
+          .where(and(
+            eq(patientPracticeMemberships.practice, record.practice),
+            eq(patientPracticeMemberships.physicalFileNumber, record.normalizedPc)
+          ))
+          .get() : null;
+
+        if (existingPcMem) {
+          newCategory = 'pc_conflict';
+        } else if (!phoneVal.isValid) {
+          newCategory = 'invalid_phone';
+        } else if (!nameVal.isValid) {
+          newCategory = 'missing_name';
+        } else if (!record.normalizedPc) {
+          newCategory = 'missing_pc';
+        } else {
+          newCategory = 'ready';
+        }
       }
 
       db.update(excelImportRecords)
@@ -633,84 +676,148 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           // Commit only valid ready records OR resolved duplicates
           const isReady = r.category === 'ready';
           const isResolvedMerged = r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person' && r.duplicateTargetPatientId;
-          const isResolvedSeparate = r.category === 'ready' || (r.category === 'duplicate' && r.duplicateResolution === 'separate_different_person');
+          const isResolvedSeparate = (r.category === 'duplicate' && r.duplicateResolution === 'separate_different_person') || isReady;
 
           if (isResolvedMerged) {
             // Option 1: Merged Same Person -> Add new Practice Membership to existing Patient ID
             const targetPtId = r.duplicateTargetPatientId!;
             const physicalNum = r.normalizedPc || getNextGlobalFileNumber();
 
-            // Check if membership already exists
-            const existingMem = db.select()
+            // Check if (practice + physicalFileNumber) ALREADY exists in DB
+            const existingMemForPc = db.select()
               .from(patientPracticeMemberships)
               .where(and(
-                eq(patientPracticeMemberships.patientId, targetPtId),
-                eq(patientPracticeMemberships.practice, r.practice)
+                eq(patientPracticeMemberships.practice, r.practice),
+                eq(patientPracticeMemberships.physicalFileNumber, physicalNum)
               ))
               .get();
 
-            if (!existingMem) {
+            if (existingMemForPc) {
+              if (existingMemForPc.patientId === targetPtId) {
+                // Same patient already has this practice membership with this PC
+                db.update(excelImportRecords)
+                  .set({ status: 'committed', importedPatientId: targetPtId })
+                  .where(eq(excelImportRecords.id, r.id))
+                  .run();
+                updatedMembershipsCount++;
+              } else {
+                // Conflict! This PC in this practice belongs to ANOTHER patient!
+                // Do NOT insert! Flag record as pc_conflict so backend does not crash with 500 error.
+                let issuesList: string[] = [];
+                try { issuesList = JSON.parse(r.issues || '[]'); } catch { issuesList = []; }
+                const practiceLabel = r.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+                issuesList.push(`تعارض شماره پرونده: شماره ${physicalNum} قبلاً در مطب ${practiceLabel} به بیمار دیگری اختصاص یافته است.`);
+
+                db.update(excelImportRecords)
+                  .set({
+                    category: 'pc_conflict',
+                    issues: JSON.stringify(issuesList),
+                    duplicateReason: `شماره پرونده فیزیکی ${physicalNum} قبلاً به بیمار دیگری اختصاص یافته است.`
+                  })
+                  .where(eq(excelImportRecords.id, r.id))
+                  .run();
+              }
+            } else {
+              // Check if targetPtId already has a membership in r.practice under a different PC
+              const existingMemForPt = db.select()
+                .from(patientPracticeMemberships)
+                .where(and(
+                  eq(patientPracticeMemberships.patientId, targetPtId),
+                  eq(patientPracticeMemberships.practice, r.practice)
+                ))
+                .get();
+
+              if (!existingMemForPt) {
+                db.insert(patientPracticeMemberships)
+                  .values({
+                    patientId: targetPtId,
+                    practice: r.practice,
+                    physicalFileNumber: physicalNum,
+                    joinedAt: todayStr
+                  })
+                  .run();
+                updatedMembershipsCount++;
+              }
+
+              db.update(excelImportRecords)
+                .set({ status: 'committed', importedPatientId: targetPtId })
+                .where(eq(excelImportRecords.id, r.id))
+                .run();
+            }
+
+          } else if (isResolvedSeparate || isReady) {
+            const physicalNum = r.normalizedPc || '101';
+
+            // Check if (practice + physicalFileNumber) ALREADY exists in DB
+            const existingMemForPc = db.select()
+              .from(patientPracticeMemberships)
+              .where(and(
+                eq(patientPracticeMemberships.practice, r.practice),
+                eq(patientPracticeMemberships.physicalFileNumber, physicalNum)
+              ))
+              .get();
+
+            if (existingMemForPc) {
+              // Conflict! This PC in this practice belongs to ANOTHER patient!
+              // Do NOT insert! Flag record as pc_conflict so backend does not crash with 500 error.
+              let issuesList: string[] = [];
+              try { issuesList = JSON.parse(r.issues || '[]'); } catch { issuesList = []; }
+              const practiceLabel = r.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+              issuesList.push(`تعارض شماره پرونده: شماره ${physicalNum} قبلاً در مطب ${practiceLabel} به بیمار دیگری اختصاص یافته است.`);
+
+              db.update(excelImportRecords)
+                .set({
+                  category: 'pc_conflict',
+                  issues: JSON.stringify(issuesList),
+                  duplicateReason: `شماره پرونده فیزیکی ${physicalNum} قبلاً به بیمار دیگری اختصاص یافته است.`
+                })
+                .where(eq(excelImportRecords.id, r.id))
+                .run();
+            } else {
+              // Option 2: Create new Patient record with profileStatus = 'completed'
+              const newPatientId = `pat-${Date.now()}-${r.excelRowNumber}`;
+              const globalFileNum = getNextGlobalFileNumber();
+              const phone = r.normalizedPhone || '09120000000';
+              const name = r.normalizedName || r.rawName || 'بیمار جدید';
+
+              // Insert into patients table
+              db.insert(patients)
+                .values({
+                  id: newPatientId,
+                  fileNumber: globalFileNum,
+                  nationalId: null,
+                  name,
+                  mobile: phone,
+                  gender: null,
+                  birthDate: null,
+                  primaryPractice: r.practice,
+                  allergies: '[]',
+                  medicalNotes: null,
+                  emergencyContact: null,
+                  profileStatus: 'completed',
+                  username: phone,
+                  password: `cl-${Math.floor(100000 + Math.random() * 900000)}`,
+                  createdAt: todayStr
+                })
+                .run();
+
+              // Insert Practice Membership
               db.insert(patientPracticeMemberships)
                 .values({
-                  patientId: targetPtId,
+                  patientId: newPatientId,
                   practice: r.practice,
                   physicalFileNumber: physicalNum,
                   joinedAt: todayStr
                 })
                 .run();
-              updatedMembershipsCount++;
+
+              db.update(excelImportRecords)
+                .set({ status: 'committed', importedPatientId: newPatientId })
+                .where(eq(excelImportRecords.id, r.id))
+                .run();
+
+              importedPatientsCount++;
             }
-
-            db.update(excelImportRecords)
-              .set({ status: 'committed', importedPatientId: targetPtId })
-              .where(eq(excelImportRecords.id, r.id))
-              .run();
-
-          } else if (isReady || isResolvedSeparate) {
-            // Option 2: Create new Patient record with profileStatus = 'incomplete'
-            const newPatientId = `pat-${Date.now()}-${r.excelRowNumber}`;
-            const globalFileNum = getNextGlobalFileNumber();
-            const physicalNum = r.normalizedPc || '101';
-            const phone = r.normalizedPhone || '09120000000';
-            const name = r.normalizedName || r.rawName || 'بیمار جدید';
-
-            // Insert into patients table
-            db.insert(patients)
-              .values({
-                id: newPatientId,
-                fileNumber: globalFileNum,
-                nationalId: null,
-                name,
-                mobile: phone,
-                gender: null,
-                birthDate: null,
-                primaryPractice: r.practice,
-                allergies: '[]',
-                medicalNotes: null,
-                emergencyContact: null,
-                profileStatus: 'completed', // Complete profile status for valid imported patients
-                username: phone,
-                password: `cl-${Math.floor(100000 + Math.random() * 900000)}`,
-                createdAt: todayStr
-              })
-              .run();
-
-            // Insert Practice Membership
-            db.insert(patientPracticeMemberships)
-              .values({
-                patientId: newPatientId,
-                practice: r.practice,
-                physicalFileNumber: physicalNum,
-                joinedAt: todayStr
-              })
-              .run();
-
-            db.update(excelImportRecords)
-              .set({ status: 'committed', importedPatientId: newPatientId })
-              .where(eq(excelImportRecords.id, r.id))
-              .run();
-
-            importedPatientsCount++;
           }
         }
 

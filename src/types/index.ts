@@ -198,7 +198,7 @@ export interface ClinicExpense {
   receiptNumber?: string;
 }
 
-export type ImportCategory = 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate';
+export type ImportCategory = 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict';
 
 export interface ImportBatch {
   id: string;
@@ -212,6 +212,7 @@ export interface ImportBatch {
   missingPcCount: number;
   invalidPhoneCount: number;
   duplicateCount: number;
+  pcConflictCount?: number;
 }
 
 export interface ImportRecord {
