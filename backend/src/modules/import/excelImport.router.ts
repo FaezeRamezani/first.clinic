@@ -263,7 +263,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
       let pcConflictCount = 0;
 
       // Temporary maps to track in-file duplicates across rows
-      const filePhoneMap = new Map<string, number>(); // phone -> first row
+      const filePhoneMap = new Map<string, { rowNumber: number; recordId: string; targetPatientId: string | null }>(); // phone -> first row details
       const filePracticePcMap = new Map<string, number>(); // practice:pc -> first row
 
       let rowIndex = 0;
@@ -316,6 +316,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         const issues: string[] = [];
         let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict' = 'ready';
         let duplicateTargetPatientId: string | null = null;
+        let duplicateTargetRecordId: string | null = null;
         let duplicateReason: string | null = null;
         let pcConflictReason: string | null = null;
 
@@ -355,12 +356,18 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           }
         }
 
+        const recId = `imp-rec-${Date.now()}-${rowNumber}-${Math.floor(Math.random() * 1000)}`;
+
         // Check 5: Duplicate Mobile within the SAME Excel file
         if (!duplicateReason && phoneVal.isValid && normalizedPhone && filePhoneMap.has(normalizedPhone)) {
-          const firstRow = filePhoneMap.get(normalizedPhone)!;
-          duplicateReason = `شماره همراه ${normalizedPhone} در ردیف ${firstRow} همین فایل اکسل نیز وجود دارد.`;
+          const prev = filePhoneMap.get(normalizedPhone)!;
+          duplicateReason = `شماره همراه ${normalizedPhone} در ردیف ${prev.rowNumber} همین فایل اکسل نیز وجود دارد.`;
+          duplicateTargetRecordId = prev.recordId;
+          if (!duplicateTargetPatientId && prev.targetPatientId) {
+            duplicateTargetPatientId = prev.targetPatientId;
+          }
         } else if (phoneVal.isValid && normalizedPhone) {
-          filePhoneMap.set(normalizedPhone, rowNumber);
+          filePhoneMap.set(normalizedPhone, { rowNumber, recordId: recId, targetPatientId: duplicateTargetPatientId });
         }
 
         // --- PC CONFLICT CHECKS (Same practice PC collisions) ---
@@ -406,7 +413,6 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           validCount++;
         }
 
-        const recId = `imp-rec-${Date.now()}-${rowNumber}-${Math.floor(Math.random() * 1000)}`;
         stagingRecords.push({
           id: recId,
           batchId,
@@ -421,7 +427,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           category,
           issues: JSON.stringify(issues),
           duplicateTargetPatientId,
-          duplicateTargetRecordId: null,
+          duplicateTargetRecordId,
           duplicateReason: duplicateReason || pcConflictReason,
           duplicateResolution: 'unresolved',
           importedPatientId: null,
@@ -672,15 +678,36 @@ export async function excelImportRouter(fastify: FastifyInstance) {
 
       // ATOMIC TRANSACTION FOR MAIN DB COMMIT
       sqlite.transaction(() => {
+        const committedRecordPatientMap = new Map<string, string>(); // recordId -> patientId
+
         for (const r of records) {
+          if (r.status === 'committed') {
+            if (r.importedPatientId) {
+              committedRecordPatientMap.set(r.id, r.importedPatientId);
+            }
+            continue;
+          }
+
+          // Resolve target patient ID for merged records
+          let targetPtId = r.duplicateTargetPatientId;
+          if (!targetPtId && r.duplicateTargetRecordId && committedRecordPatientMap.has(r.duplicateTargetRecordId)) {
+            targetPtId = committedRecordPatientMap.get(r.duplicateTargetRecordId)!;
+          }
+          if (!targetPtId && r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person' && r.normalizedPhone) {
+            const dbPt = db.select().from(patients).where(eq(patients.mobile, r.normalizedPhone)).get();
+            if (dbPt) {
+              targetPtId = dbPt.id;
+            }
+          }
+
           // Commit only valid ready records OR resolved duplicates
           const isReady = r.category === 'ready';
-          const isResolvedMerged = r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person' && r.duplicateTargetPatientId;
+          const isResolvedMerged = r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person' && Boolean(targetPtId);
           const isResolvedSeparate = (r.category === 'duplicate' && r.duplicateResolution === 'separate_different_person') || isReady;
 
           if (isResolvedMerged) {
             // Option 1: Merged Same Person -> Add new Practice Membership to existing Patient ID
-            const targetPtId = r.duplicateTargetPatientId!;
+            const finalPtId = targetPtId!;
             const physicalNum = r.normalizedPc || getNextGlobalFileNumber();
 
             // Check if (practice + physicalFileNumber) ALREADY exists in DB
@@ -693,12 +720,13 @@ export async function excelImportRouter(fastify: FastifyInstance) {
               .get();
 
             if (existingMemForPc) {
-              if (existingMemForPc.patientId === targetPtId) {
+              if (existingMemForPc.patientId === finalPtId) {
                 // Same patient already has this practice membership with this PC
                 db.update(excelImportRecords)
-                  .set({ status: 'committed', importedPatientId: targetPtId })
+                  .set({ status: 'committed', importedPatientId: finalPtId })
                   .where(eq(excelImportRecords.id, r.id))
                   .run();
+                committedRecordPatientMap.set(r.id, finalPtId);
                 updatedMembershipsCount++;
               } else {
                 // Conflict! This PC in this practice belongs to ANOTHER patient!
@@ -718,11 +746,11 @@ export async function excelImportRouter(fastify: FastifyInstance) {
                   .run();
               }
             } else {
-              // Check if targetPtId already has a membership in r.practice under a different PC
+              // Check if finalPtId already has a membership in r.practice under a different PC
               const existingMemForPt = db.select()
                 .from(patientPracticeMemberships)
                 .where(and(
-                  eq(patientPracticeMemberships.patientId, targetPtId),
+                  eq(patientPracticeMemberships.patientId, finalPtId),
                   eq(patientPracticeMemberships.practice, r.practice)
                 ))
                 .get();
@@ -730,19 +758,28 @@ export async function excelImportRouter(fastify: FastifyInstance) {
               if (!existingMemForPt) {
                 db.insert(patientPracticeMemberships)
                   .values({
-                    patientId: targetPtId,
+                    patientId: finalPtId,
                     practice: r.practice,
                     physicalFileNumber: physicalNum,
                     joinedAt: todayStr
                   })
                   .run();
                 updatedMembershipsCount++;
+              } else if (!existingMemForPt.physicalFileNumber && physicalNum) {
+                db.update(patientPracticeMemberships)
+                  .set({ physicalFileNumber: physicalNum })
+                  .where(and(
+                    eq(patientPracticeMemberships.patientId, finalPtId),
+                    eq(patientPracticeMemberships.practice, r.practice)
+                  ))
+                  .run();
               }
 
               db.update(excelImportRecords)
-                .set({ status: 'committed', importedPatientId: targetPtId })
+                .set({ status: 'committed', importedPatientId: finalPtId })
                 .where(eq(excelImportRecords.id, r.id))
                 .run();
+              committedRecordPatientMap.set(r.id, finalPtId);
             }
 
           } else if (isResolvedSeparate || isReady) {
@@ -815,6 +852,7 @@ export async function excelImportRouter(fastify: FastifyInstance) {
                 .set({ status: 'committed', importedPatientId: newPatientId })
                 .where(eq(excelImportRecords.id, r.id))
                 .run();
+              committedRecordPatientMap.set(r.id, newPatientId);
 
               importedPatientsCount++;
             }

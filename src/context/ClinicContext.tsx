@@ -821,6 +821,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const patsData = await patientsApi.getPatients();
       if (Array.isArray(patsData)) {
         setPatients(patsData);
+        if (selectedPatient) {
+          const freshSelected = patsData.find(p => p.id === selectedPatient.id);
+          if (freshSelected) {
+            setSelectedPatient(freshSelected);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to refresh patients:', err);
