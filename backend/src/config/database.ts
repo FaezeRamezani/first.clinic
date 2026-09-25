@@ -20,6 +20,13 @@ export const sqlite = new Database(fullDbPath);
 sqlite.pragma('foreign_keys = ON');
 sqlite.pragma('journal_mode = WAL');
 
+// Ensure optional phone column exists in patient_practice_memberships for practice-specific secondary mobile numbers
+try {
+  sqlite.exec('ALTER TABLE patient_practice_memberships ADD COLUMN phone TEXT;');
+} catch (_) {
+  // column already exists
+}
+
 // Drizzle ORM Instance
 export const db = drizzle(sqlite, { schema });
 

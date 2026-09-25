@@ -22,7 +22,8 @@ export const patientPracticeMemberships = sqliteTable('patient_practice_membersh
   patientId: text('patient_id').notNull().references(() => patients.id, { onDelete: 'cascade' }),
   practice: text('practice').notNull(), // 'aesthetic' | 'dental'
   physicalFileNumber: text('physical_file_number').notNull(),
-  joinedAt: text('joined_at').notNull() // Jalali YYYY-MM-DD
+  joinedAt: text('joined_at').notNull(), // Jalali YYYY-MM-DD
+  phone: text('phone') // Optional practice-specific phone if different from patient.mobile
 }, (table) => [
   primaryKey({ columns: [table.patientId, table.practice] }),
   uniqueIndex('idx_practice_physical_file').on(table.practice, table.physicalFileNumber)

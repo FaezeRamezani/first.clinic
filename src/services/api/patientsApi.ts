@@ -52,5 +52,16 @@ export const patientsApi = {
       method: 'PATCH',
       body: JSON.stringify({ physicalFileNumber: newFileNumber })
     });
+  },
+
+  mergePatients: async (params: {
+    patientAId: string;
+    patientBId: string;
+    primaryPatientId: string;
+  }): Promise<Patient> => {
+    return request<Patient>('/api/patients/merge', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
   }
 };

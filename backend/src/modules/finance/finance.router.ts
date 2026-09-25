@@ -6,8 +6,8 @@ import { expenses } from '../../db/schema/expenses';
 import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { services } from '../../db/schema/services';
 import { paymentAccounts } from '../../db/schema/paymentAccounts';
-import { eq, and, sql } from 'drizzle-orm';
-import { toStandardJalaliDbDate, toEnglishDigits } from '../../utils/dateUtils';
+import { eq, and } from 'drizzle-orm';
+import { toStandardJalaliDbDate } from '../../utils/dateUtils';
 import { sanitizeFreeText } from '../../utils/validation';
 import moment from 'jalali-moment';
 

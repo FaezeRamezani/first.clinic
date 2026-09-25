@@ -226,6 +226,7 @@ interface ClinicContextType {
   setCreatedIncompletePatientModal: (p: Patient | null) => void;
   markPatientProfileCompleted: (patientId: string) => void;
   refreshPatients: () => Promise<void>;
+  mergePatients: (patientAId: string, patientBId: string, primaryPatientId: string) => Promise<Patient>;
 }
 
 
@@ -833,6 +834,35 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const mergePatients = async (patientAId: string, patientBId: string, primaryPatientId: string): Promise<Patient> => {
+    try {
+      const mergedPatient = await patientsApi.mergePatients({
+        patientAId,
+        patientBId,
+        primaryPatientId
+      });
+
+      const [patsData, aptsData, trxsData, tasksData] = await Promise.all([
+        patientsApi.getPatients().catch(() => null),
+        appointmentsApi.getAppointments().catch(() => null),
+        financeApi.getTransactions().catch(() => null),
+        followUpsApi.getTasks().catch(() => null)
+      ]);
+
+      if (Array.isArray(patsData)) setPatients(patsData);
+      if (Array.isArray(aptsData)) setAppointments(aptsData);
+      if (Array.isArray(trxsData)) setTransactions(trxsData);
+      if (Array.isArray(tasksData)) setFollowUps(tasksData);
+
+      setSelectedPatient(mergedPatient);
+      return mergedPatient;
+    } catch (err: any) {
+      console.error('Failed to merge patients:', err);
+      alert(err.message || 'خطا در ادغام پرونده‌های بیمار');
+      throw err;
+    }
+  };
+
   return (
     <ClinicContext.Provider
       value={{
@@ -934,7 +964,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         createdIncompletePatientModal,
         setCreatedIncompletePatientModal,
         markPatientProfileCompleted,
-        refreshPatients
+        refreshPatients,
+        mergePatients
       }}
     >
       {children}

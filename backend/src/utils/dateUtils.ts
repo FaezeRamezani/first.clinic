@@ -3,9 +3,6 @@
  * Stores Jalali dates strictly as YYYY-MM-DD with English digits and hyphen separator.
  * Example: "1405-06-16" (NOT "۱۴۰۵/۰۶/۱۶" and NOT Gregorian "2026-09-07").
  */
-
-const farsiDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-
 export function toEnglishDigits(str: string | number | null | undefined): string {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[۰-۹]/g, (w) => (w.charCodeAt(0) - 1776).toString());

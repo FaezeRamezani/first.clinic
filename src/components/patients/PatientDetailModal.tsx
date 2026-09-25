@@ -15,8 +15,10 @@ import {
   Edit2,
   Filter,
   Check,
-  RotateCcw
+  RotateCcw,
+  GitMerge
 } from 'lucide-react';
+import { MergePatientModal } from '../modals/MergePatientModal';
 import type { Patient } from '../../types';
 
 interface PatientDetailModalProps {
@@ -32,6 +34,8 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
 
   const hasDental = hasPracticeMembership(currentPatient, 'dental');
   const hasAesthetic = hasPracticeMembership(currentPatient, 'aesthetic');
+  const dentalMem = currentPatient.memberships?.find(m => m.practice === 'dental');
+  const aestheticMem = currentPatient.memberships?.find(m => m.practice === 'aesthetic');
 
   // Initial scope: if in both, 'unified'; if only dental, 'dental'; if only aesthetic, 'aesthetic'
   const initialScope = (hasDental && hasAesthetic) ? 'unified' : (hasDental ? 'dental' : 'aesthetic');
@@ -39,6 +43,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
 
   const [activeTab, setActiveTab] = useState<'basic' | 'appointments' | 'ledger' | 'treatments'>('ledger');
   const [newDoctorNote, setNewDoctorNote] = useState<string>('');
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState<boolean>(false);
 
   // Draft Edit State for Personal Info & Practice File Numbers
   const [isEditingPersonal, setIsEditingPersonal] = useState<boolean>(false);
@@ -183,12 +188,18 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                     <span className="px-2 py-0.5 bg-teal-900/90 text-teal-200 border border-teal-700/60 rounded text-[10px] font-bold flex items-center gap-1">
                       <Stethoscope className="w-3 h-3 text-teal-400" />
                       <span>دندانپزشکی ({toFarsiDigits(getPhysicalFileNumber(currentPatient, 'dental') || '-')})</span>
+                      {dentalMem?.phone && dentalMem.phone !== currentPatient.mobile && (
+                        <span className="text-teal-300 text-[9px] mr-1">({toFarsiDigits(dentalMem.phone)})</span>
+                      )}
                     </span>
                   )}
                   {hasAesthetic && (
                     <span className="px-2 py-0.5 bg-purple-900/90 text-purple-200 border border-purple-700/60 rounded text-[10px] font-bold flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-purple-400" />
                       <span>زیبایی ({toFarsiDigits(getPhysicalFileNumber(currentPatient, 'aesthetic') || '-')})</span>
+                      {aestheticMem?.phone && aestheticMem.phone !== currentPatient.mobile && (
+                        <span className="text-purple-300 text-[9px] mr-1">({toFarsiDigits(aestheticMem.phone)})</span>
+                      )}
                     </span>
                   )}
                 </div>
@@ -424,13 +435,25 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={startEditingPersonal}
-                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Edit2 className="w-4 h-4 text-indigo-600" />
-                      <span>ویرایش اطلاعات پرونده</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsMergeModalOpen(true)}
+                        className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/90 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                        title="ادغام و اتصال این پرونده با پرونده دیگر این شخص"
+                      >
+                        <GitMerge className="w-4 h-4 text-amber-600" />
+                        <span>ادغام با پرونده دیگر</span>
+                      </button>
+
+                      <button
+                        onClick={startEditingPersonal}
+                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Edit2 className="w-4 h-4 text-indigo-600" />
+                        <span>ویرایش اطلاعات پرونده</span>
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -583,19 +606,33 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
 
                     {hasDental && (
                       <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200">
-                        <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی دندانپزشکی: </span>
-                        <strong className="text-teal-700 font-bold text-sm dir-ltr inline-block">
-                          {getPhysicalFileNumber(currentPatient, 'dental') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'dental')) : 'ثبت نشده'}
-                        </strong>
+                        <div>
+                          <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی دندانپزشکی: </span>
+                          <strong className="text-teal-700 font-bold text-sm dir-ltr inline-block">
+                            {getPhysicalFileNumber(currentPatient, 'dental') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'dental')) : 'ثبت نشده'}
+                          </strong>
+                        </div>
+                        {dentalMem?.phone && dentalMem.phone !== currentPatient.mobile && (
+                          <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                            موبایل این پرونده: {toFarsiDigits(dentalMem.phone)}
+                          </span>
+                        )}
                       </div>
                     )}
 
                     {hasAesthetic && (
                       <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-slate-200">
-                        <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی زیبایی: </span>
-                        <strong className="text-purple-700 font-bold text-sm dir-ltr inline-block">
-                          {getPhysicalFileNumber(currentPatient, 'aesthetic') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'aesthetic')) : 'ثبت نشده'}
-                        </strong>
+                        <div>
+                          <span className="text-slate-500 font-semibold">شماره پرونده فیزیکی زیبایی: </span>
+                          <strong className="text-purple-700 font-bold text-sm dir-ltr inline-block">
+                            {getPhysicalFileNumber(currentPatient, 'aesthetic') ? toFarsiDigits(getPhysicalFileNumber(currentPatient, 'aesthetic')) : 'ثبت نشده'}
+                          </strong>
+                        </div>
+                        {aestheticMem?.phone && aestheticMem.phone !== currentPatient.mobile && (
+                          <span className="text-[10px] font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                            موبایل این پرونده: {toFarsiDigits(aestheticMem.phone)}
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -787,10 +824,20 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
 
             </div>
           )}
-
         </div>
-
       </div>
+
+      {/* Merge Patient Modal */}
+      {isMergeModalOpen && (
+        <MergePatientModal
+          currentPatient={currentPatient}
+          isOpen={isMergeModalOpen}
+          onClose={() => setIsMergeModalOpen(false)}
+          onSuccess={() => {
+            setIsMergeModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { request } from './httpClient';
+import { request, API_BASE_URL } from './httpClient';
 import type { ImportBatch, ImportRecord } from '../../types';
 
 export interface UploadImportPayload {
@@ -43,7 +43,7 @@ export const importApi = {
     formData.append('file', file);
     formData.append('practice', practice);
 
-    const res = await fetch('http://127.0.0.1:3000/api/import/upload', {
+    const res = await fetch(`${API_BASE_URL}/api/import/upload`, {
       method: 'POST',
       body: formData
     });

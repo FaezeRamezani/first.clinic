@@ -64,6 +64,7 @@ export interface PracticeMembership {
   practice: PracticeType;
   physicalFileNumber: string;
   joinedAt?: string;
+  phone?: string; // practice-specific phone if different from patient.mobile
 }
 
 export interface Patient {

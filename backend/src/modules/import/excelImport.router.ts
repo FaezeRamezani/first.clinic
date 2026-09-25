@@ -1,10 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 import ExcelJS from 'exceljs';
 import { db, sqlite } from '../../config/database';
 import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { excelImportBatches, excelImportRecords } from '../../db/schema/import';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { toStandardJalaliDbDate } from '../../utils/dateUtils';
 import {
   validatePersianName,

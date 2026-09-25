@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { db, sqlite } from '../../config/database';
 import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { financialObligations, paymentReceipts } from '../../db/schema/finance';
+import { appointments } from '../../db/schema/appointments';
+import { followUpTasks } from '../../db/schema/followups';
+import { excelImportRecords } from '../../db/schema/import';
 import { eq, and } from 'drizzle-orm';
 import { toStandardJalaliDbDate } from '../../utils/dateUtils';
 import { 
@@ -67,6 +70,12 @@ const updatePhysicalFileSchema = z.object({
   physicalFileNumber: z.string().min(1, 'شماره پرونده فیزیکی الزامی است')
 });
 
+const mergePatientsSchema = z.object({
+  patientAId: z.string().min(1, 'شناسه پرونده اول الزامی است'),
+  patientBId: z.string().min(1, 'شناسه پرونده دوم الزامی است'),
+  primaryPatientId: z.string().min(1, 'شناسه پرونده اصلی الزامی است')
+});
+
 function getNextGlobalFileNumber(): string {
   const allPts = db.select().from(patients).all();
   let maxNum = 1000;
@@ -118,7 +127,8 @@ function formatPatientData(p: typeof patients.$inferSelect, memberships: (typeof
   const formattedMemberships = memberships.map(m => ({
     practice: m.practice as 'aesthetic' | 'dental',
     physicalFileNumber: m.physicalFileNumber,
-    joinedAt: m.joinedAt
+    joinedAt: m.joinedAt,
+    phone: m.phone || undefined
   }));
 
   const allObligations = db.select().from(financialObligations).where(eq(financialObligations.patientId, p.id)).all();
@@ -188,8 +198,9 @@ export async function patientsRouter(fastify: FastifyInstance) {
           
           const pMems = allMemberships.filter(m => m.patientId === p.id);
           const matchPhysicalFile = pMems.some(m => m.physicalFileNumber.toLowerCase().includes(q));
+          const matchMembershipPhone = pMems.some(m => m.phone && m.phone.includes(q));
 
-          return matchName || matchMobile || matchNational || matchId || matchGlobalFile || matchPhysicalFile;
+          return matchName || matchMobile || matchMembershipPhone || matchNational || matchId || matchGlobalFile || matchPhysicalFile;
         });
       }
 
@@ -558,6 +569,182 @@ export async function patientsRouter(fastify: FastifyInstance) {
       return reply.status(500).send({
         success: false,
         error: { code: 'INTERNAL_ERROR', message: 'خطا در ویرایش شماره پرونده فیزیکی مطب' }
+      });
+    }
+  });
+
+  // POST /api/patients/merge
+  fastify.post('/merge', async (request, reply) => {
+    try {
+      const parseResult = mergePatientsSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        const issue = parseResult.error.issues[0];
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: issue?.message || 'اطلاعات ارسالی برای ادغام معتبر نیست' }
+        });
+      }
+
+      const { patientAId, patientBId, primaryPatientId } = parseResult.data;
+
+      // 1. Guard: Cannot merge a patient with itself
+      if (patientAId === patientBId) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_MERGE', message: 'امکان ادغام یک پرونده با خودش وجود ندارد.' }
+        });
+      }
+
+      // 2. Guard: primaryPatientId must be one of the two patients
+      if (primaryPatientId !== patientAId && primaryPatientId !== patientBId) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: 'INVALID_PRIMARY_PATIENT', message: 'پرونده اصلی انتخاب‌شده باید یکی از دو پرونده مشخص‌شده باشد.' }
+        });
+      }
+
+      const primaryId = primaryPatientId;
+      const secondaryId = primaryPatientId === patientAId ? patientBId : patientAId;
+
+      const primaryPatient = db.select().from(patients).where(eq(patients.id, primaryId)).get();
+      const secondaryPatient = db.select().from(patients).where(eq(patients.id, secondaryId)).get();
+
+      if (!primaryPatient || !secondaryPatient) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'یکی از دو پرونده انتخاب‌شده برای ادغام یافت نشد.' }
+        });
+      }
+
+      const primaryMems = db.select().from(patientPracticeMemberships).where(eq(patientPracticeMemberships.patientId, primaryId)).all();
+      const secondaryMems = db.select().from(patientPracticeMemberships).where(eq(patientPracticeMemberships.patientId, secondaryId)).all();
+
+      // 3. Guard: Prevent merge if both patients have a membership in the same practice
+      const overlapping = secondaryMems.filter(sm => primaryMems.some(pm => pm.practice === sm.practice));
+      if (overlapping.length > 0) {
+        const practiceNames = overlapping.map(m => m.practice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی').join(' و ');
+        return reply.status(409).send({
+          success: false,
+          error: {
+            code: 'PRACTICE_CONFLICT',
+            message: `امکان ادغام مستقیم این دو پرونده وجود ندارد؛ هر دو بیمار دارای عضویت در ${practiceNames} هستند. برای ادغام، یک بیمار نباید در یک مطب دو پرونده همزمان داشته باشد.`
+          }
+        });
+      }
+
+      // 4. Atomic Database Transaction
+      sqlite.transaction(() => {
+        // A. Transfer Practice Memberships from secondary to primary
+        for (const sm of secondaryMems) {
+          const practicePhone = sm.phone || (secondaryPatient.mobile !== primaryPatient.mobile ? secondaryPatient.mobile : null);
+
+          db.update(patientPracticeMemberships)
+            .set({
+              patientId: primaryId,
+              phone: practicePhone
+            })
+            .where(and(
+              eq(patientPracticeMemberships.patientId, secondaryId),
+              eq(patientPracticeMemberships.practice, sm.practice)
+            ))
+            .run();
+        }
+
+        // B. Transfer Appointments
+        db.update(appointments)
+          .set({ patientId: primaryId })
+          .where(eq(appointments.patientId, secondaryId))
+          .run();
+
+        // C. Transfer Financial Obligations
+        db.update(financialObligations)
+          .set({ patientId: primaryId })
+          .where(eq(financialObligations.patientId, secondaryId))
+          .run();
+
+        // D. Transfer Payment Receipts
+        db.update(paymentReceipts)
+          .set({ patientId: primaryId })
+          .where(eq(paymentReceipts.patientId, secondaryId))
+          .run();
+
+        // E. Transfer Follow-up Tasks
+        db.update(followUpTasks)
+          .set({ patientId: primaryId })
+          .where(eq(followUpTasks.patientId, secondaryId))
+          .run();
+
+        // F. Transfer soft references in Excel Import Records
+        db.update(excelImportRecords)
+          .set({ duplicateTargetPatientId: primaryId })
+          .where(eq(excelImportRecords.duplicateTargetPatientId, secondaryId))
+          .run();
+
+        db.update(excelImportRecords)
+          .set({ importedPatientId: primaryId })
+          .where(eq(excelImportRecords.importedPatientId, secondaryId))
+          .run();
+
+        // G. Merge Identity/Clinical Details from secondary if primary lacked them
+        const updatesToPrimary: Partial<typeof primaryPatient> = {};
+
+        if (!primaryPatient.nationalId && secondaryPatient.nationalId) {
+          updatesToPrimary.nationalId = secondaryPatient.nationalId;
+        }
+        if (!primaryPatient.birthDate && secondaryPatient.birthDate) {
+          updatesToPrimary.birthDate = secondaryPatient.birthDate;
+        }
+        if (!primaryPatient.gender && secondaryPatient.gender) {
+          updatesToPrimary.gender = secondaryPatient.gender;
+        }
+        if (secondaryPatient.medicalNotes && secondaryPatient.medicalNotes.trim()) {
+          if (primaryPatient.medicalNotes && primaryPatient.medicalNotes.trim()) {
+            updatesToPrimary.medicalNotes = `${primaryPatient.medicalNotes}\n[سوابق ادغام‌شده]: ${secondaryPatient.medicalNotes}`;
+          } else {
+            updatesToPrimary.medicalNotes = secondaryPatient.medicalNotes;
+          }
+        }
+
+        // Allergies
+        let pAlg: string[] = [];
+        let sAlg: string[] = [];
+        try { if (primaryPatient.allergies) pAlg = JSON.parse(primaryPatient.allergies); } catch (_) {}
+        try { if (secondaryPatient.allergies) sAlg = JSON.parse(secondaryPatient.allergies); } catch (_) {}
+        const mergedAlg = Array.from(new Set([...pAlg, ...sAlg]));
+        if (mergedAlg.length > 0) {
+          updatesToPrimary.allergies = JSON.stringify(mergedAlg);
+        }
+
+        // Emergency contact
+        if (!primaryPatient.emergencyContact && secondaryPatient.emergencyContact) {
+          updatesToPrimary.emergencyContact = secondaryPatient.emergencyContact;
+        }
+
+        if (Object.keys(updatesToPrimary).length > 0) {
+          db.update(patients)
+            .set(updatesToPrimary)
+            .where(eq(patients.id, primaryId))
+            .run();
+        }
+
+        // H. Delete the secondary patient (all foreign keys have been moved)
+        db.delete(patients)
+          .where(eq(patients.id, secondaryId))
+          .run();
+      })();
+
+      const updatedPrimary = db.select().from(patients).where(eq(patients.id, primaryId)).get();
+      const updatedMems = db.select().from(patientPracticeMemberships).where(eq(patientPracticeMemberships.patientId, primaryId)).all();
+
+      return reply.send({
+        success: true,
+        data: formatPatientData(updatedPrimary!, updatedMems)
+      });
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({
+        success: false,
+        error: { code: 'INTERNAL_ERROR', message: 'خطا در عملیات ادغام پرونده‌های بیمار' }
       });
     }
   });

@@ -6,8 +6,8 @@ import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { doctors } from '../../db/schema/doctors';
 import { appointments } from '../../db/schema/appointments';
 import { financialObligations, paymentReceipts } from '../../db/schema/finance';
-import { eq, and } from 'drizzle-orm';
-import { toStandardJalaliDbDate, toEnglishDigits } from '../../utils/dateUtils';
+import { eq } from 'drizzle-orm';
+import { toStandardJalaliDbDate } from '../../utils/dateUtils';
 import moment from 'jalali-moment';
 
 function getTodayJalaliStr(): string {

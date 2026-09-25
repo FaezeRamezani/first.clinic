@@ -5,7 +5,7 @@ import { appointments } from '../../db/schema/appointments';
 import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { doctors } from '../../db/schema/doctors';
 import { services } from '../../db/schema/services';
-import { eq, and, ne, inArray } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { toStandardJalaliDbDate, toEnglishDigits } from '../../utils/dateUtils';
 import { sanitizeFreeText } from '../../utils/validation';
 

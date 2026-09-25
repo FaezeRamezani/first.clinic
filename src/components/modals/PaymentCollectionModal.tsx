@@ -126,11 +126,7 @@ export const PaymentCollectionModal: React.FC = () => {
         setIsPaymentCollectionOpen(false);
       }
     } catch (err) {
-      console.error('=== PAYMENT SUBMISSION ERROR AUDIT LOG ===');
-      console.error('Raw Error Object:', err);
-      console.error('Is Error Instance:', err instanceof Error);
-      console.error('Error Message:', err instanceof Error ? err.message : String(err));
-      console.error('Stack Trace:', err instanceof Error ? err.stack : 'No stack trace available');
+      console.error('Failed to submit payment:', err);
       alert(`خطای سیستم در ثبت پرداختی: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
