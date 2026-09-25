@@ -37,6 +37,13 @@ export const ExcelImportView: React.FC = () => {
   const [records, setRecords] = useState<ImportRecord[]>([]);
   const [activeCategoryTab, setActiveCategoryTab] = useState<ImportCategory | 'all'>('ready');
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(false);
+  // pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 20;
+  // reset page when tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeCategoryTab]);
 
   // Edit record modal state
   const [editingRecord, setEditingRecord] = useState<ImportRecord | null>(null);
@@ -140,7 +147,7 @@ export const ExcelImportView: React.FC = () => {
         rawPhone: editPhone
       });
       setEditingRecord(null);
-      await loadBatchDetails(activeBatch.id);
+      await refreshImportRecords();
     } catch (err: any) {
       alert(err.message || 'خطا در ویرایش رکورد');
     } finally {
@@ -161,7 +168,7 @@ export const ExcelImportView: React.FC = () => {
         resolvingRecord.duplicateTargetPatientId || undefined
       );
       setResolvingRecord(null);
-      await loadBatchDetails(activeBatch.id);
+      await refreshImportRecords();
     } catch (err: any) {
       alert(err.message || 'خطا در ثبت تصمیم تکرار');
     } finally {
@@ -181,7 +188,7 @@ export const ExcelImportView: React.FC = () => {
       setCommitSuccessMsg(res.message);
       await refreshPatients();
       await loadBatches();
-      await loadBatchDetails(activeBatch.id);
+      await refreshImportRecords();
     } catch (err: any) {
       alert(err.message || 'خطا در ثبت نهایی اکسل');
     } finally {
@@ -189,17 +196,34 @@ export const ExcelImportView: React.FC = () => {
     }
   };
 
+  // Centralized refresh for import records
+  const refreshImportRecords = async () => {
+    if (!activeBatch) return;
+    await loadBatchDetails(activeBatch.id);
+  };
+
+  // Pending records excluding already committed ones
+  const pendingRecords = records.filter(r => r.status !== 'committed');
+
   // Counts calculation
-  const readyRecords = records.filter(r => r.category === 'ready');
-  const missingNameRecords = records.filter(r => r.category === 'missing_name');
-  const missingPcRecords = records.filter(r => r.category === 'missing_pc');
-  const invalidPhoneRecords = records.filter(r => r.category === 'invalid_phone');
-  const duplicateRecords = records.filter(r => r.category === 'duplicate');
-  const pcConflictRecords = records.filter(r => r.category === 'pc_conflict');
+  const readyRecords = pendingRecords.filter(r => r.category === 'ready');
+  const missingNameRecords = pendingRecords.filter(r => r.category === 'missing_name');
+  const missingPcRecords = pendingRecords.filter(r => r.category === 'missing_pc');
+  const invalidPhoneRecords = pendingRecords.filter(r => r.category === 'invalid_phone');
+  const duplicateRecords = pendingRecords.filter(r => r.category === 'duplicate');
+  const pcConflictRecords = pendingRecords.filter(r => r.category === 'pc_conflict');
 
   const filteredRecords = activeCategoryTab === 'all'
-    ? records
-    : records.filter(r => r.category === activeCategoryTab);
+    ? pendingRecords
+    : pendingRecords.filter(r => r.category === activeCategoryTab);
+
+  // ensure current page is valid when filtered records change
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
+    setCurrentPage(prev => Math.min(prev, totalPages));
+  }, [filteredRecords]);
+
+  const paginatedRecords = filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
     <div className="space-y-6 pb-16">
@@ -606,7 +630,7 @@ export const ExcelImportView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                      {filteredRecords.map((r) => (
+                      {paginatedRecords.map((r) => (
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3 px-3 text-slate-400 font-mono text-[11px]">
                             {toFarsiDigits(r.excelRowNumber)}
@@ -702,6 +726,24 @@ export const ExcelImportView: React.FC = () => {
                       ))}
                     </tbody>
                   </table>
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-center gap-2 mt-4 text-sm">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 rounded border disabled:opacity-50"
+                  >
+                    قبلی
+                  </button>
+                  <span>صفحه {toFarsiDigits(currentPage)} از {toFarsiDigits(Math.max(1, Math.ceil(filteredRecords.length / pageSize)))}</span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, Math.max(1, Math.ceil(filteredRecords.length / pageSize))))}
+                    disabled={currentPage === Math.max(1, Math.ceil(filteredRecords.length / pageSize))}
+                    className="px-3 py-1 rounded border disabled:opacity-50"
+                  >
+                    بعدی
+                  </button>
+                </div>
                 </div>
               </div>
             )}

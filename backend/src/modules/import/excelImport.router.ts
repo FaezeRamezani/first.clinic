@@ -520,33 +520,78 @@ export async function excelImportRouter(fastify: FastifyInstance) {
       const phoneVal = validateIranianMobile(newRawPhone);
       if (!phoneVal.isValid) issues.push(phoneVal.error || 'شماره همراه نامعتبر یا ناقص است');
 
-      let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict' = record.category as any;
+      let category: 'ready' | 'missing_name' | 'missing_pc' | 'invalid_phone' | 'duplicate' | 'pc_conflict' = 'ready';
+let duplicateTargetPatientId: string | null = null;
+let duplicateTargetRecordId: string | null = null; // unchanged during edit
+let duplicateReason: string | null = null;
 
-      // Recalculate category if not resolving duplicate
-      if (category !== 'duplicate' || record.duplicateResolution === 'separate_different_person') {
-        const existingPcMem = normalizedPc ? db.select()
-          .from(patientPracticeMemberships)
-          .where(and(
-            eq(patientPracticeMemberships.practice, record.practice),
-            eq(patientPracticeMemberships.physicalFileNumber, normalizedPc)
-          ))
-          .get() : null;
+// Duplicate detection using existing DB records
+const existingPatients = db.select().from(patients).all();
+const existingMemberships = db.select().from(patientPracticeMemberships).all();
 
-        if (existingPcMem) {
-          category = 'pc_conflict';
-          const ptName = db.select().from(patients).where(eq(patients.id, existingPcMem.patientId)).get()?.name || '';
-          const practiceLabel = record.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
-          issues.push(`شماره پرونده فیزیکی ${normalizedPc} قبلاً در مطب ${practiceLabel} به یک پرونده دیگر${ptName ? ` («${ptName}»)` : ''} اختصاص داده شده است.`);
-        } else if (!phoneVal.isValid) {
-          category = 'invalid_phone';
-        } else if (!nameVal.isValid) {
-          category = 'missing_name';
-        } else if (!normalizedPc) {
-          category = 'missing_pc';
-        } else {
-          category = 'ready';
-        }
-      }
+// Build lookup maps
+const dbPhoneMap = new Map<string, typeof existingPatients[0]>();
+for (const p of existingPatients) {
+  const normMob = normalizeIranianMobile(p.mobile);
+  if (normMob) dbPhoneMap.set(normMob, p);
+}
+const dbNameMap = new Map<string, typeof existingPatients[0][]>();
+for (const p of existingPatients) {
+  const normName = normalizePersianChars(normalizeDigits(p.name.trim()));
+  if (normName) {
+    const list = dbNameMap.get(normName) || [];
+    list.push(p);
+    dbNameMap.set(normName, list);
+  }
+}
+
+// Phone duplicate check
+if (phoneVal.isValid && normalizedPhone && dbPhoneMap.has(normalizedPhone)) {
+  const matched = dbPhoneMap.get(normalizedPhone)!;
+  duplicateTargetPatientId = matched.id;
+  duplicateReason = `شماره همراه ${normalizedPhone} قبلاً برای بیمار «${matched.name}» (پرونده ${matched.fileNumber}) در سیستم ثبت شده است.`;
+}
+
+// Name + phone duplicate check
+if (!duplicateReason && normalizedName && normalizedPhone && phoneVal.isValid) {
+  const nameMatched = dbNameMap.get(normalizedName);
+  if (nameMatched && nameMatched.length > 0) {
+    const fullMatch = nameMatched.find(p => normalizeIranianMobile(p.mobile) === normalizedPhone);
+    if (fullMatch) {
+      duplicateTargetPatientId = fullMatch.id;
+      duplicateReason = `نام «${fullMatch.name}» و شماره همراه ${normalizedPhone} با پرونده موجود در سیستم مطابقت دارد.`;
+    }
+  }
+}
+
+// PC conflict check (same practice)
+let pcConflictReason: string | null = null;
+if (normalizedPc) {
+  const practiceLabel = record.practice === 'dental' ? 'دندانپزشکی' : 'زیبایی';
+  const existingPcMem = existingMemberships.find(m =>
+    m.practice === record.practice &&
+    normalizeDigits(m.physicalFileNumber.trim()).replace(/\\.0+$/, '') === normalizedPc
+  );
+  if (existingPcMem && (!duplicateTargetPatientId || duplicateTargetPatientId !== existingPcMem.patientId)) {
+    pcConflictReason = `شماره پرونده فیزیکی ${normalizedPc} قبلاً در مطب ${practiceLabel} به یک پرونده دیگر اختصاص داده شده است.`;
+  }
+}
+
+// Determine final category
+if (duplicateReason) {
+  category = 'duplicate';
+} else if (pcConflictReason) {
+  category = 'pc_conflict';
+  issues.push(pcConflictReason);
+} else if (!phoneVal.isValid) {
+  category = 'invalid_phone';
+} else if (!nameVal.isValid) {
+  category = 'missing_name';
+} else if (!normalizedPc) {
+  category = 'missing_pc';
+} else {
+  category = 'ready';
+}
 
       db.update(excelImportRecords)
         .set({
@@ -557,7 +602,11 @@ export async function excelImportRouter(fastify: FastifyInstance) {
           normalizedName,
           normalizedPhone,
           category,
-          issues: JSON.stringify(issues)
+          issues: JSON.stringify(issues),
+          duplicateTargetPatientId,
+          duplicateTargetRecordId: record.duplicateTargetRecordId,
+          duplicateReason: duplicateReason || pcConflictReason,
+          duplicateResolution: record.duplicateResolution
         })
         .where(eq(excelImportRecords.id, id))
         .run();
