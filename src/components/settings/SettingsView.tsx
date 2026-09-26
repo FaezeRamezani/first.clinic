@@ -402,7 +402,7 @@ export const SettingsView: React.FC = () => {
                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ افزودن حساب / دستگاه</span>
+                <span>+ افزودن حساب</span>
               </button>
             </div>
 
