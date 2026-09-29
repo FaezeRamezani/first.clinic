@@ -78,7 +78,7 @@ function buildFormattedTransactions() {
   const allObs = db.select().from(financialObligations).all();
   const allReceipts = db.select().from(paymentReceipts).all();
 
-  // Group receipts by obligationId
+  // Group receipts by obligationId and sort each list chronologically
   const receiptsByOb = new Map<string, (typeof paymentReceipts.$inferSelect)[]>();
   for (const r of allReceipts) {
     if (r.obligationId) {
@@ -88,19 +88,40 @@ function buildFormattedTransactions() {
     }
   }
 
-  const result: any[] = [];
+  for (const [, list] of receiptsByOb) {
+    list.sort((a, b) => a.recordDate.localeCompare(b.recordDate) || a.id.localeCompare(b.id));
+  }
 
-  // 1. Obligations (Treatment / Service Items)
+  const result: any[] = [];
+  const initialReceiptIds = new Set<string>();
+
+  // 1. Obligations (Treatment / Service Items - Immutable Historical Event)
   for (const ob of allObs) {
     const pt = patientMap.get(ob.patientId);
     const fileNum = memMap.get(`${ob.patientId}_${ob.practice}`) || pt?.fileNumber || '-';
     const linkedReceipts = receiptsByOb.get(ob.id) || [];
-    const totalPaid = linkedReceipts.reduce((sum, r) => sum + r.paidAmount, 0);
-    const netCost = ob.totalCost - ob.discount;
-    const remainingDebt = Math.max(0, netCost - totalPaid);
 
-    // Initial receipt if any was created with obligation
-    const initialReceipt = linkedReceipts.length > 0 ? linkedReceipts[0] : null;
+    // Find the initial checkout receipt created alongside this obligation
+    const initialReceipt = linkedReceipts.find(r => 
+      r.notes?.includes('پرداخت اولیه') ||
+      r.id.startsWith(`pay-${ob.id}`) ||
+      r.id.startsWith(`pay-ob-${ob.id.replace(/^ob-/, '')}`)
+    ) || (
+      linkedReceipts.length > 0 && linkedReceipts[0].recordDate === ob.recordDate && !linkedReceipts[0].notes?.includes('وصول قسط')
+        ? linkedReceipts[0]
+        : null
+    );
+
+    if (initialReceipt) {
+      initialReceiptIds.add(initialReceipt.id);
+    }
+
+    const netCost = ob.totalCost - ob.discount;
+    const initialPaid = initialReceipt ? initialReceipt.paidAmount : 0;
+    const initialRemaining = Math.max(0, netCost - initialPaid);
+
+    const totalPaidLive = linkedReceipts.reduce((sum, r) => sum + r.paidAmount, 0);
+    const liveRemainingDebt = Math.max(0, netCost - totalPaidLive);
 
     result.push({
       id: ob.id,
@@ -116,11 +137,13 @@ function buildFormattedTransactions() {
       totalCost: ob.totalCost,
       discount: ob.discount,
       netCost: netCost,
-      paidAmount: totalPaid,
-      remainingDebt: remainingDebt,
+      paidAmount: initialPaid,            // Immutable historical payment at checkout
+      remainingDebt: initialRemaining,    // Immutable historical remaining debt at checkout
+      currentPaidAmount: totalPaidLive,   // Live current total paid
+      currentRemainingDebt: liveRemainingDebt, // Live current remaining debt
       paymentMethod: (initialReceipt?.paymentMethod as any) || 'cash',
       posAccount: initialReceipt?.posAccount || 'نقد',
-      debtDueDate: ob.dueDate || undefined,
+      debtDueDate: ob.dueDate || initialReceipt?.debtDueDate || undefined,
       lastActionDate: ob.recordDate,
       notes: ob.notes || undefined,
       trxType: 'service',
@@ -128,19 +151,24 @@ function buildFormattedTransactions() {
     });
   }
 
-  // 2. Payment Receipts (Independent Receipts)
+  // 2. Payment Receipts (Independent / Subsequent Receipts)
   for (const r of allReceipts) {
+    // Skip initial checkout receipt since it is already represented in the service item
+    if (initialReceiptIds.has(r.id)) {
+      continue;
+    }
+
     const pt = patientMap.get(r.patientId);
     const fileNum = memMap.get(`${r.patientId}_${r.practice}`) || pt?.fileNumber || '-';
     
-    // Calculate remaining debt for obligation at or after this receipt
+    // Calculate running remaining debt for obligation after this receipt
     let remaining = 0;
     if (r.obligationId) {
       const ob = allObs.find(o => o.id === r.obligationId);
       if (ob) {
         const linked = receiptsByOb.get(ob.id) || [];
         const totalPaidSoFar = linked
-          .filter(l => l.recordDate <= r.recordDate || l.id === r.id)
+          .filter(l => l.recordDate < r.recordDate || (l.recordDate === r.recordDate && (l.id <= r.id || initialReceiptIds.has(l.id))))
           .reduce((sum, l) => sum + l.paidAmount, 0);
         remaining = Math.max(0, (ob.totalCost - ob.discount) - totalPaidSoFar);
       }

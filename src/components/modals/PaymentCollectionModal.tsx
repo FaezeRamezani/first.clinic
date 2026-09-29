@@ -34,10 +34,11 @@ export const PaymentCollectionModal: React.FC = () => {
 
   // Calculate live debt details for active service or overall patient balance
   const activePatientBalanceDebt = pat ? Math.abs(pat.balance) : 0;
+  const activeTrxLiveRemaining = activeTrx ? (activeTrx.currentRemainingDebt !== undefined ? activeTrx.currentRemainingDebt : activeTrx.remainingDebt) : 0;
   const currentDebt = activeTrx
-    ? (activeTrx.remainingDebt > 0 ? activeTrx.remainingDebt : (activePatientBalanceDebt > 0 ? activePatientBalanceDebt : activeTrx.netCost))
+    ? (activeTrxLiveRemaining > 0 ? activeTrxLiveRemaining : (activePatientBalanceDebt > 0 ? activePatientBalanceDebt : activeTrx.netCost))
     : (activePatientBalanceDebt > 0 ? activePatientBalanceDebt : 0);
-  const previousPaid = activeTrx ? activeTrx.paidAmount : 0;
+  const previousPaid = activeTrx ? (activeTrx.currentPaidAmount !== undefined ? activeTrx.currentPaidAmount : activeTrx.paidAmount) : 0;
 
   const [amount, setAmount] = useState<number>(currentDebt);
   const [posAccount, setPosAccount] = useState<string>('');
@@ -60,8 +61,9 @@ export const PaymentCollectionModal: React.FC = () => {
 
       const targetTrx = patientServiceTransactions.find(t => t.id === defaultTrxId);
       const activeBalance = Math.abs(pat.balance);
+      const targetLiveRemaining = targetTrx ? (targetTrx.currentRemainingDebt !== undefined ? targetTrx.currentRemainingDebt : targetTrx.remainingDebt) : 0;
       const debtVal = targetTrx
-        ? (targetTrx.remainingDebt > 0 ? targetTrx.remainingDebt : (activeBalance > 0 ? activeBalance : targetTrx.netCost))
+        ? (targetLiveRemaining > 0 ? targetLiveRemaining : (activeBalance > 0 ? activeBalance : targetTrx.netCost))
         : (activeBalance > 0 ? activeBalance : 0);
 
       setAmount(debtVal);
@@ -78,8 +80,9 @@ export const PaymentCollectionModal: React.FC = () => {
     setSelectedTrxId(newTrxId);
     const targetTrx = patientServiceTransactions.find(t => t.id === newTrxId);
     const activeBalance = pat ? Math.abs(pat.balance) : 0;
+    const targetLiveRemaining = targetTrx ? (targetTrx.currentRemainingDebt !== undefined ? targetTrx.currentRemainingDebt : targetTrx.remainingDebt) : 0;
     const debtVal = targetTrx
-      ? (targetTrx.remainingDebt > 0 ? targetTrx.remainingDebt : (activeBalance > 0 ? activeBalance : targetTrx.netCost))
+      ? (targetLiveRemaining > 0 ? targetLiveRemaining : (activeBalance > 0 ? activeBalance : targetTrx.netCost))
       : (activeBalance > 0 ? activeBalance : 0);
 
     setAmount(debtVal);

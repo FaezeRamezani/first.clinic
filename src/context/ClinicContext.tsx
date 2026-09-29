@@ -628,7 +628,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       const targetTrx = transactionId
         ? transactions.find(t => t.id === transactionId)
-        : transactions.find(t => t.patientId === patientId && t.practice === practice && t.trxType !== 'payment' && (t.remainingDebt > 0 || t.lastActionDate === todayStr));
+        : transactions.find(t => t.patientId === patientId && t.practice === practice && t.trxType !== 'payment' && ((t.currentRemainingDebt !== undefined ? t.currentRemainingDebt : t.remainingDebt) > 0 || t.lastActionDate === todayStr));
 
       await financeApi.recordPayment({
         obligationId: targetTrx?.obligationId || targetTrx?.id,

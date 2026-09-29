@@ -163,6 +163,8 @@ export interface FinancialTransaction {
   notes?: string;
   trxType?: 'service' | 'payment';
   obligationId?: string;
+  currentPaidAmount?: number;
+  currentRemainingDebt?: number;
 }
 
 export interface FollowUpTask {

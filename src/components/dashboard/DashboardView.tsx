@@ -75,7 +75,7 @@ export const DashboardView: React.FC = () => {
       (t.obligationId === ob.id || (ob.appointmentId && t.appointmentId === ob.appointmentId))
     );
 
-    const totalPaidOnObligation = linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+    const totalPaidOnObligation = (ob.paidAmount || 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
     const remainingDebt = Math.max(0, (ob.netCost || 0) - totalPaidOnObligation);
 
     const latestPayment = linkedPayments[0];

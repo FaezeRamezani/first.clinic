@@ -92,7 +92,7 @@ export function getJalaliDateOffset(baseDateStr: string, daysOffset: number): st
 export function getDateRelationToToday(dateStr: string): 'past' | 'today' | 'future' {
   const normalizedTarget = toEnglishDigits(dateStr).trim().replace(/\//g, '-');
   const normalizedToday = toEnglishDigits(getTodayJalaliDate()).trim().replace(/\//g, '-');
-  
+
   if (normalizedTarget < normalizedToday) return 'past';
   if (normalizedTarget > normalizedToday) return 'future';
   return 'today';
@@ -116,7 +116,7 @@ export function isPastUnfinalizedAppointment(apt: { date: string; status: string
   if (!apt || !apt.date) return false;
   const normTarget = toEnglishDigits(apt.date).trim().replace(/\//g, '-');
   const normToday = toEnglishDigits(getTodayJalaliDate()).trim().replace(/\//g, '-');
-  
+
   if (normTarget >= normToday) return false;
 
   // Finalized criteria: status is completed, canceled, rescheduled, OR presenceStatus is absent
@@ -149,7 +149,7 @@ export function getJalaliDayOfWeekName(dateStr: string): 'شنبه' | 'یکشن�
   const eng = toEnglishDigits(dateStr).trim().replace(/\//g, '-');
   const m = moment(eng, 'jYYYY-jMM-jDD').locale('fa');
   if (!m.isValid()) return 'شنبه';
-  return m.format('dddd') as any;
+  return m.format('dddd').replace('یک‌شنبه', 'یکشنبه') as any;
 }
 
 

@@ -228,12 +228,12 @@ export const FinanceView: React.FC = () => {
               <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                 {debtorsList.map((pat) => {
                   const patTrxs = transactions.filter(t => t.patientId === pat.id);
-                  const targetTrx = patTrxs.find(t => t.trxType !== 'payment' && (t.remainingDebt > 0 || t.lastActionDate === selectedDate)) || patTrxs.find(t => t.trxType !== 'payment');
+                  const targetTrx = patTrxs.find(t => t.trxType !== 'payment' && ((t.currentRemainingDebt !== undefined ? t.currentRemainingDebt : t.remainingDebt) > 0 || t.lastActionDate === selectedDate)) || patTrxs.find(t => t.trxType !== 'payment');
                   const linkedPayments = targetTrx 
                     ? patTrxs.filter(t => t.trxType === 'payment' && (t.obligationId === targetTrx.id || (t.appointmentId && t.appointmentId === targetTrx.appointmentId)))
                     : patTrxs.filter(t => t.trxType === 'payment');
 
-                  const totalPaidSoFar = linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
+                  const totalPaidSoFar = (targetTrx?.paidAmount || 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
                   const liveRemainingDebt = targetTrx ? Math.max(0, targetTrx.netCost - totalPaidSoFar) : (pat.balance < 0 ? Math.abs(pat.balance) : 0);
 
                   const targetPractice = targetTrx ? targetTrx.practice : pat.primaryPractice;

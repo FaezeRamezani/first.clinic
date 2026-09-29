@@ -19,7 +19,9 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Building2,
+  AlertCircle
 } from 'lucide-react';
 import { PatientDetailModal } from './PatientDetailModal';
 import type { PracticeType } from '../../types';
@@ -32,11 +34,15 @@ type FinancialStatusFilter = 'settled' | 'positive' | 'negative';
 interface AppliedFilters {
   financialStatus: FinancialStatusFilter[];
   practice: PracticeType[];
+  incompleteOnly: boolean;
+  bothPractices: boolean;
 }
 
 const INITIAL_FILTERS: AppliedFilters = {
   financialStatus: [],
-  practice: []
+  practice: [],
+  incompleteOnly: false,
+  bothPractices: false
 };
 
 export const PatientDirectoryView: React.FC = () => {
@@ -88,13 +94,23 @@ export const PatientDirectoryView: React.FC = () => {
     if (scope !== 'unified') {
       setAppliedFilters(prev => {
         const valid = prev.practice.filter(p => p === scope);
-        if (valid.length === prev.practice.length) return prev;
-        return { ...prev, practice: valid as PracticeType[] };
+        const shouldResetBoth = prev.bothPractices;
+        if (valid.length === prev.practice.length && !shouldResetBoth) return prev;
+        return {
+          ...prev,
+          practice: valid as PracticeType[],
+          bothPractices: false
+        };
       });
       setStagedFilters(prev => {
         const valid = prev.practice.filter(p => p === scope);
-        if (valid.length === prev.practice.length) return prev;
-        return { ...prev, practice: valid as PracticeType[] };
+        const shouldResetBoth = prev.bothPractices;
+        if (valid.length === prev.practice.length && !shouldResetBoth) return prev;
+        return {
+          ...prev,
+          practice: valid as PracticeType[],
+          bothPractices: false
+        };
       });
     }
   }, [scope]);
@@ -107,7 +123,8 @@ export const PatientDirectoryView: React.FC = () => {
 
     setStagedFilters({
       ...appliedFilters,
-      practice: currentPracticeFilters
+      practice: currentPracticeFilters,
+      bothPractices: scope !== 'unified' ? false : appliedFilters.bothPractices
     });
     setIsFilterOpen(prev => !prev);
   };
@@ -154,6 +171,25 @@ export const PatientDirectoryView: React.FC = () => {
         if (!matchesPractice) return false;
       }
 
+      // 3. Incomplete Profile Filter (AND logic)
+      if (appliedFilters.incompleteOnly) {
+        const isIncomplete =
+          patient.profileStatus === 'incomplete' &&
+          Boolean(
+            patient.memberships &&
+            patient.memberships.length > 0 &&
+            patient.memberships.some(m => !!m.physicalFileNumber)
+          );
+        if (!isIncomplete) return false;
+      }
+
+      // 4. Both Practices Membership Filter (AND logic)
+      if (appliedFilters.bothPractices) {
+        const hasDental = patient.memberships?.some(m => m.practice === 'dental');
+        const hasAesthetic = patient.memberships?.some(m => m.practice === 'aesthetic');
+        if (!hasDental || !hasAesthetic) return false;
+      }
+
       return true;
     });
   }, [searchFilteredPatients, appliedFilters]);
@@ -198,7 +234,10 @@ export const PatientDirectoryView: React.FC = () => {
   };
 
   const handleApplyFilters = () => {
-    setAppliedFilters(stagedFilters);
+    setAppliedFilters({
+      ...stagedFilters,
+      bothPractices: scope !== 'unified' ? false : stagedFilters.bothPractices
+    });
     setIsFilterOpen(false);
     setCurrentPage(1);
   };
@@ -210,11 +249,21 @@ export const PatientDirectoryView: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const handleRemoveSingleFilter = (type: keyof AppliedFilters, value: string) => {
+  const handleRemoveSingleFilter = (type: 'financialStatus' | 'practice', value: string) => {
     const updated = {
       ...appliedFilters,
       [type]: (appliedFilters[type] as string[]).filter(v => v !== value)
-    } as AppliedFilters;
+    };
+    setAppliedFilters(updated);
+    setStagedFilters(updated);
+    setCurrentPage(1);
+  };
+
+  const handleRemoveBooleanFilter = (key: 'incompleteOnly' | 'bothPractices') => {
+    const updated = {
+      ...appliedFilters,
+      [key]: false
+    };
     setAppliedFilters(updated);
     setStagedFilters(updated);
     setCurrentPage(1);
@@ -246,7 +295,11 @@ export const PatientDirectoryView: React.FC = () => {
   const paginatedPatients = sortedPatients.slice(startIndex, startIndex + pageSize);
 
   // Active filter count calculation
-  const activeFiltersCount = appliedFilters.financialStatus.length + appliedFilters.practice.length;
+  const activeFiltersCount =
+    appliedFilters.financialStatus.length +
+    appliedFilters.practice.length +
+    (appliedFilters.incompleteOnly ? 1 : 0) +
+    (appliedFilters.bothPractices ? 1 : 0);
 
   return (
     <div className="space-y-6 pb-12">
@@ -287,8 +340,8 @@ export const PatientDirectoryView: React.FC = () => {
             <button
               onClick={handleOpenFilterPanel}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeFiltersCount > 0 || isFilterOpen
-                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs'
-                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                ? 'bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs'
+                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                 }`}
             >
               <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
@@ -334,8 +387,8 @@ export const PatientDirectoryView: React.FC = () => {
                           <label
                             key={opt.id}
                             className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${isChecked
-                                ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900'
-                                : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700'
+                              ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900'
+                              : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700'
                               }`}
                           >
                             <span className={opt.color}>{opt.label}</span>
@@ -380,10 +433,10 @@ export const PatientDirectoryView: React.FC = () => {
                           <label
                             key={opt.id}
                             className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold transition-colors ${isOutsideScope
-                                ? 'bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 select-none'
-                                : isChecked
-                                  ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-pointer'
-                                  : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700 cursor-pointer'
+                              ? 'bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 select-none'
+                              : isChecked
+                                ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-pointer'
+                                : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700 cursor-pointer'
                               }`}
                             title={isOutsideScope ? 'این بخش خارج از محدوده مطب انتخاب‌شده در Top Bar است' : undefined}
                           >
@@ -412,6 +465,72 @@ export const PatientDirectoryView: React.FC = () => {
                           </label>
                         );
                       })}
+
+                      {/* Both Practices Option */}
+                      {(() => {
+                        const isOutsideScope = scope !== 'unified';
+                        const isChecked = stagedFilters.bothPractices && !isOutsideScope;
+                        return (
+                          <label
+                            key="both-practices"
+                            className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold transition-colors ${isOutsideScope
+                              ? 'bg-slate-100/70 border-slate-200 text-slate-400 cursor-not-allowed opacity-60 select-none'
+                              : isChecked
+                                ? 'bg-indigo-50/60 border-indigo-200 text-indigo-900 cursor-pointer'
+                                : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700 cursor-pointer'
+                              }`}
+                            title={isOutsideScope ? 'این فیلتر فقط در حالت کلینیک مشترک (همه مطب‌ها) قابل انتخاب است' : undefined}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className={`w-3.5 h-3.5 ${isOutsideScope ? 'text-slate-400' : 'text-purple-700'}`} />
+                              <span>هر دو مطب</span>
+                              {isOutsideScope && (
+                                <span className="text-[10px] text-slate-400 font-normal mr-1">
+                                  (غیرفعال در این Scope)
+                                </span>
+                              )}
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={isOutsideScope}
+                              onChange={(e) => {
+                                if (isOutsideScope) return;
+                                setStagedFilters({ ...stagedFilters, bothPractices: e.target.checked });
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                          </label>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Record Status Filter Group */}
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-2">
+                      وضعیت پرونده:
+                    </label>
+                    <div className="space-y-1.5">
+                      <label
+                        className={`flex items-center justify-between p-2 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${stagedFilters.incompleteOnly
+                          ? 'bg-rose-50/60 border-rose-200 text-rose-900'
+                          : 'bg-slate-50/50 border-slate-100 hover:bg-slate-50 text-slate-700'
+                          }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                          <span>پرونده ناقص</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={stagedFilters.incompleteOnly}
+                          onChange={(e) => {
+                            setStagedFilters({ ...stagedFilters, incompleteOnly: e.target.checked });
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                        />
+                      </label>
                     </div>
                   </div>
 
@@ -499,6 +618,34 @@ export const PatientDirectoryView: React.FC = () => {
               </span>
             );
           })}
+
+          {appliedFilters.bothPractices && (
+            <span
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-indigo-200 text-indigo-900 rounded-lg text-xs font-bold shadow-2xs"
+            >
+              <span>هر دو مطب</span>
+              <button
+                onClick={() => handleRemoveBooleanFilter('bothPractices')}
+                className="p-0.5 hover:bg-indigo-100 rounded-md transition-colors cursor-pointer text-indigo-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+
+          {appliedFilters.incompleteOnly && (
+            <span
+              className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-rose-200 text-rose-900 rounded-lg text-xs font-bold shadow-2xs"
+            >
+              <span>پرونده ناقص</span>
+              <button
+                onClick={() => handleRemoveBooleanFilter('incompleteOnly')}
+                className="p-0.5 hover:bg-rose-100 rounded-md transition-colors cursor-pointer text-rose-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
 
           <button
             onClick={handleClearFilters}
