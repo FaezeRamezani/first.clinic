@@ -9,4 +9,5 @@ export * from './expenses';
 export * from './onlineRequests';
 export * from './settings';
 export * from './import';
+export * from './deposits';
 

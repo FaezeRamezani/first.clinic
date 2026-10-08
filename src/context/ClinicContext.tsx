@@ -17,10 +17,26 @@ import type {
   FollowUpStatus,
   DoctorDaySchedule,
   PaymentAccount,
-  GlobalShiftsConfig
+  GlobalShiftsConfig,
+  Deposit
 } from '../types';
 import { getTodayJalaliDate, getJalaliDateOffset, toEnglishDigits, toFarsiDigits } from '../utils/persianUtils';
-import { settingsApi, doctorsApi, servicesApi, paymentAccountsApi, patientsApi, appointmentsApi, financeApi, followUpsApi, onlineRequestsApi } from '../services/api';
+import {
+  settingsApi,
+  doctorsApi,
+  servicesApi,
+  paymentAccountsApi,
+  patientsApi,
+  appointmentsApi,
+  financeApi,
+  followUpsApi,
+  onlineRequestsApi,
+  depositsApi,
+  type CreateDepositDto,
+  type UpdateDepositDto,
+  type AdjustDepositAmountDto,
+  type RefundDepositDto
+} from '../services/api';
 
 const DEFAULT_GLOBAL_SHIFTS: GlobalShiftsConfig = {
   morning: { startTime: '09:00', endTime: '14:00' },
@@ -227,6 +243,28 @@ interface ClinicContextType {
   markPatientProfileCompleted: (patientId: string) => void;
   refreshPatients: () => Promise<void>;
   mergePatients: (patientAId: string, patientBId: string, primaryPatientId: string) => Promise<Patient>;
+
+  // Deposits State & Methods
+  deposits: Deposit[];
+  isNewDepositOpen: boolean;
+  setIsNewDepositOpen: (open: boolean) => void;
+  newDepositPrefill: NewDepositPrefillData | null;
+  setNewDepositPrefill: (prefill: NewDepositPrefillData | null) => void;
+  openNewDeposit: (prefill?: NewDepositPrefillData) => void;
+  selectedDepositForDetail: Deposit | null;
+  setSelectedDepositForDetail: (deposit: Deposit | null) => void;
+  openDepositDetail: (depositOrId: Deposit | string) => void;
+  refreshDeposits: () => Promise<void>;
+  addDeposit: (depositData: CreateDepositDto) => Promise<Deposit>;
+  updateDeposit: (id: string, data: UpdateDepositDto) => Promise<Deposit>;
+  adjustDepositAmount: (id: string, data: AdjustDepositAmountDto) => Promise<Deposit>;
+  refundDeposit: (id: string, data: RefundDepositDto) => Promise<Deposit>;
+  applyDepositToService: (depositId: string, obligationId: string, amount?: number) => Promise<Deposit>;
+}
+
+export interface NewDepositPrefillData {
+  patient?: Patient | null;
+  practice?: PracticeType;
 }
 
 
@@ -285,6 +323,12 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [createdIncompletePatientModal, setCreatedIncompletePatientModal] = useState<Patient | null>(null);
 
+  // Deposits state
+  const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [isNewDepositOpen, setIsNewDepositOpen] = useState<boolean>(false);
+  const [newDepositPrefill, setNewDepositPrefill] = useState<NewDepositPrefillData | null>(null);
+  const [selectedDepositForDetail, setSelectedDepositForDetail] = useState<Deposit | null>(null);
+
   // Dashboard specific date state
   const [dashboardDate, setDashboardDate] = useState<string>(getTodayJalaliDate());
 
@@ -294,7 +338,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const loadBackendData = async () => {
       try {
-        const [shiftsData, catsData, docsData, srvsData, accsData, patsData, aptsData, trxsData, expsData, tasksData, reqsData] = await Promise.all([
+        const [shiftsData, catsData, docsData, srvsData, accsData, patsData, aptsData, trxsData, expsData, tasksData, reqsData, depsData] = await Promise.all([
           settingsApi.getGlobalShifts().catch(() => null),
           settingsApi.getExpenseCategories().catch(() => null),
           doctorsApi.getDoctors().catch(() => null),
@@ -305,7 +349,8 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           financeApi.getTransactions().catch(() => null),
           financeApi.getExpenses().catch(() => null),
           followUpsApi.getTasks().catch(() => null),
-          onlineRequestsApi.getRequests().catch(() => null)
+          onlineRequestsApi.getRequests().catch(() => null),
+          depositsApi.getDeposits().catch(() => null)
         ]);
 
         if (!isMounted) return;
@@ -321,6 +366,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (Array.isArray(expsData)) setExpenses(expsData);
         if (Array.isArray(tasksData)) setFollowUps(tasksData);
         if (Array.isArray(reqsData)) setOnlineRequests(reqsData);
+        if (Array.isArray(depsData)) setDeposits(depsData);
       } catch (err) {
         console.error('Failed to load initial Phase 6 backend data:', err);
       }
@@ -339,7 +385,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const openQuickCheckout = (appointment: Appointment) => {
-    if (appointment.id && transactions.some(t => t.appointmentId === appointment.id)) {
+    if (appointment.id && transactions.some(t => t.appointmentId === appointment.id && t.trxType === 'service')) {
       alert('برای این نوبت قبلاً تسویه مالی انجام شده است.');
       return;
     }
@@ -523,7 +569,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const recordCheckout = async (trxData: Omit<FinancialTransaction, 'id'>) => {
     try {
-      if (trxData.appointmentId && transactions.some(t => t.appointmentId === trxData.appointmentId)) {
+      if (trxData.appointmentId && transactions.some(t => t.appointmentId === trxData.appointmentId && t.trxType === 'service')) {
         alert('برای این نوبت قبلاً تسویه مالی ثبت شده است.');
         return;
       }
@@ -579,18 +625,21 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         notes: trxData.notes,
         paidAmount: trxData.paidAmount || 0,
         paymentMethod: trxData.paymentMethod,
-        posAccount: trxData.posAccount
+        posAccount: trxData.posAccount,
+        depositId: trxData.depositId
       });
 
-      const [freshTrxs, freshPats, freshApts] = await Promise.all([
+      const [freshTrxs, freshPats, freshApts, freshDeps] = await Promise.all([
         financeApi.getTransactions(),
         patientsApi.getPatients(),
-        appointmentsApi.getAppointments()
+        appointmentsApi.getAppointments(),
+        depositsApi.getDeposits()
       ]);
 
       setTransactions(freshTrxs);
       setPatients(freshPats);
       setAppointments(freshApts);
+      setDeposits(freshDeps);
     } catch (err: any) {
       console.error('Failed to record checkout:', err);
       alert(err.message || 'خطا در ثبت تسویه مالی');
@@ -863,6 +912,123 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const openNewDeposit = (prefill?: NewDepositPrefillData) => {
+    setNewDepositPrefill(prefill || null);
+    setIsNewDepositOpen(true);
+  };
+
+  const openDepositDetail = async (depositOrId: Deposit | string) => {
+    if (typeof depositOrId === 'string') {
+      const found = deposits.find(d => d.id === depositOrId);
+      if (found) {
+        setSelectedDepositForDetail(found);
+      } else {
+        try {
+          const fetched = await depositsApi.getDeposit(depositOrId);
+          setSelectedDepositForDetail(fetched);
+        } catch {
+          // fallback
+        }
+      }
+    } else {
+      setSelectedDepositForDetail(depositOrId);
+    }
+  };
+
+  const refreshDeposits = async () => {
+    try {
+      const fresh = await depositsApi.getDeposits();
+      setDeposits(fresh);
+      if (selectedDepositForDetail) {
+        const updated = fresh.find(d => d.id === selectedDepositForDetail.id);
+        if (updated) setSelectedDepositForDetail(updated);
+      }
+    } catch (err) {
+      console.error('Failed to refresh deposits:', err);
+    }
+  };
+
+  const addDeposit = async (depositData: CreateDepositDto): Promise<Deposit> => {
+    const created = await depositsApi.createDeposit(depositData);
+    const [freshDeps, freshTrxs, freshApts, freshPats] = await Promise.all([
+      depositsApi.getDeposits(),
+      financeApi.getTransactions(),
+      appointmentsApi.getAppointments(),
+      patientsApi.getPatients()
+    ]);
+    setDeposits(freshDeps);
+    setTransactions(freshTrxs);
+    setAppointments(freshApts);
+    setPatients(freshPats);
+    return created;
+  };
+
+  const updateDeposit = async (id: string, data: UpdateDepositDto): Promise<Deposit> => {
+    const updated = await depositsApi.updateDeposit(id, data);
+    const [freshDeps, freshApts] = await Promise.all([
+      depositsApi.getDeposits(),
+      appointmentsApi.getAppointments()
+    ]);
+    setDeposits(freshDeps);
+    setAppointments(freshApts);
+    if (selectedDepositForDetail?.id === id) {
+      const freshSelected = freshDeps.find(d => d.id === id);
+      if (freshSelected) setSelectedDepositForDetail(freshSelected);
+    }
+    return updated;
+  };
+
+  const adjustDepositAmount = async (id: string, data: AdjustDepositAmountDto): Promise<Deposit> => {
+    const updated = await depositsApi.adjustAmount(id, data);
+    const [freshDeps, freshTrxs, freshPats] = await Promise.all([
+      depositsApi.getDeposits(),
+      financeApi.getTransactions(),
+      patientsApi.getPatients()
+    ]);
+    setDeposits(freshDeps);
+    setTransactions(freshTrxs);
+    setPatients(freshPats);
+    if (selectedDepositForDetail?.id === id) {
+      const freshSelected = freshDeps.find(d => d.id === id);
+      if (freshSelected) setSelectedDepositForDetail(freshSelected);
+    }
+    return updated;
+  };
+
+  const refundDeposit = async (id: string, data: RefundDepositDto): Promise<Deposit> => {
+    const updated = await depositsApi.refundDeposit(id, data);
+    const [freshDeps, freshTrxs, freshPats] = await Promise.all([
+      depositsApi.getDeposits(),
+      financeApi.getTransactions(),
+      patientsApi.getPatients()
+    ]);
+    setDeposits(freshDeps);
+    setTransactions(freshTrxs);
+    setPatients(freshPats);
+    if (selectedDepositForDetail?.id === id) {
+      const freshSelected = freshDeps.find(d => d.id === id);
+      if (freshSelected) setSelectedDepositForDetail(freshSelected);
+    }
+    return updated;
+  };
+
+  const applyDepositToService = async (depositId: string, obligationId: string, amount?: number): Promise<Deposit> => {
+    const updated = await depositsApi.applyDeposit(depositId, { obligationId, amount });
+    const [freshDeps, freshTrxs, freshPats] = await Promise.all([
+      depositsApi.getDeposits(),
+      financeApi.getTransactions(),
+      patientsApi.getPatients()
+    ]);
+    setDeposits(freshDeps);
+    setTransactions(freshTrxs);
+    setPatients(freshPats);
+    if (selectedDepositForDetail?.id === depositId) {
+      const freshSelected = freshDeps.find(d => d.id === depositId);
+      if (freshSelected) setSelectedDepositForDetail(freshSelected);
+    }
+    return updated;
+  };
+
   return (
     <ClinicContext.Provider
       value={{
@@ -965,7 +1131,24 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setCreatedIncompletePatientModal,
         markPatientProfileCompleted,
         refreshPatients,
-        mergePatients
+        mergePatients,
+
+        // Deposits State & Methods
+        deposits,
+        isNewDepositOpen,
+        setIsNewDepositOpen,
+        newDepositPrefill,
+        setNewDepositPrefill,
+        openNewDeposit,
+        selectedDepositForDetail,
+        setSelectedDepositForDetail,
+        openDepositDetail,
+        refreshDeposits,
+        addDeposit,
+        updateDeposit,
+        adjustDepositAmount,
+        refundDeposit,
+        applyDepositToService
       }}
     >
       {children}

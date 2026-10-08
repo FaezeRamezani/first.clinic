@@ -107,9 +107,25 @@ export async function excelImportRouter(fastify: FastifyInstance) {
 
       const records = db.select().from(excelImportRecords).where(eq(excelImportRecords.batchId, id)).all();
 
+      // Self-heal any staged records where duplicate was already resolved as merged_same_person
+      for (const r of records) {
+        if (r.status === 'staged' && r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person') {
+          db.update(excelImportRecords)
+            .set({ category: 'ready' })
+            .where(eq(excelImportRecords.id, r.id))
+            .run();
+          r.category = 'ready';
+        }
+      }
+
       // Format records with parsed issues JSON & matched target patient details if duplicate
       const allPatientsMap = new Map(db.select().from(patients).all().map(p => [p.id, p]));
       const allMemberships = db.select().from(patientPracticeMemberships).all();
+      const phoneToPatientMap = new Map();
+      for (const pt of allPatientsMap.values()) {
+        const normMob = normalizeIranianMobile(pt.mobile);
+        if (normMob) phoneToPatientMap.set(normMob, pt);
+      }
 
       const formattedRecords = records.map(r => {
         let parsedIssues: string[] = [];
@@ -120,8 +136,9 @@ export async function excelImportRouter(fastify: FastifyInstance) {
         }
 
         let matchedPatient = null;
-        if (r.duplicateTargetPatientId && allPatientsMap.has(r.duplicateTargetPatientId)) {
-          const pt = allPatientsMap.get(r.duplicateTargetPatientId)!;
+        const targetPtId = r.duplicateTargetPatientId || (r.normalizedPhone ? phoneToPatientMap.get(r.normalizedPhone)?.id : null);
+        if (targetPtId && allPatientsMap.has(targetPtId)) {
+          const pt = allPatientsMap.get(targetPtId)!;
           const pMems = allMemberships.filter(m => m.patientId === pt.id);
           matchedPatient = {
             id: pt.id,
@@ -646,6 +663,14 @@ if (duplicateReason) {
       }
 
       let newCategory = record.category;
+      let finalTargetPatientId = targetPatientId || record.duplicateTargetPatientId;
+      if (!finalTargetPatientId && record.normalizedPhone) {
+        const dbPt = db.select().from(patients).where(eq(patients.mobile, record.normalizedPhone)).get();
+        if (dbPt) {
+          finalTargetPatientId = dbPt.id;
+        }
+      }
+
       if (resolution === 'separate_different_person') {
         // Re-evaluate if valid
         const nameVal = validatePersianName(record.rawName);
@@ -670,12 +695,37 @@ if (duplicateReason) {
         } else {
           newCategory = 'ready';
         }
+      } else if (resolution === 'merged_same_person') {
+        // Re-evaluate if valid for merge
+        const nameVal = validatePersianName(record.rawName);
+        const phoneVal = validateIranianMobile(record.rawPhone);
+
+        const existingPcMem = record.normalizedPc ? db.select()
+          .from(patientPracticeMemberships)
+          .where(and(
+            eq(patientPracticeMemberships.practice, record.practice),
+            eq(patientPracticeMemberships.physicalFileNumber, record.normalizedPc)
+          ))
+          .get() : null;
+
+        // PC conflict ONLY if this PC in this practice belongs to ANOTHER patient (not the merge target)
+        if (existingPcMem && finalTargetPatientId && existingPcMem.patientId !== finalTargetPatientId) {
+          newCategory = 'pc_conflict';
+        } else if (!phoneVal.isValid) {
+          newCategory = 'invalid_phone';
+        } else if (!nameVal.isValid) {
+          newCategory = 'missing_name';
+        } else if (!record.normalizedPc) {
+          newCategory = 'missing_pc';
+        } else {
+          newCategory = 'ready';
+        }
       }
 
       db.update(excelImportRecords)
         .set({
           duplicateResolution: resolution,
-          duplicateTargetPatientId: targetPatientId || record.duplicateTargetPatientId,
+          duplicateTargetPatientId: finalTargetPatientId || null,
           category: newCategory
         })
         .where(eq(excelImportRecords.id, id))
@@ -741,7 +791,7 @@ if (duplicateReason) {
           if (!targetPtId && r.duplicateTargetRecordId && committedRecordPatientMap.has(r.duplicateTargetRecordId)) {
             targetPtId = committedRecordPatientMap.get(r.duplicateTargetRecordId)!;
           }
-          if (!targetPtId && r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person' && r.normalizedPhone) {
+          if (!targetPtId && r.duplicateResolution === 'merged_same_person' && r.normalizedPhone) {
             const dbPt = db.select().from(patients).where(eq(patients.mobile, r.normalizedPhone)).get();
             if (dbPt) {
               targetPtId = dbPt.id;
@@ -750,8 +800,8 @@ if (duplicateReason) {
 
           // Commit only valid ready records OR resolved duplicates
           const isReady = r.category === 'ready';
-          const isResolvedMerged = r.category === 'duplicate' && r.duplicateResolution === 'merged_same_person' && Boolean(targetPtId);
-          const isResolvedSeparate = (r.category === 'duplicate' && r.duplicateResolution === 'separate_different_person') || isReady;
+          const isResolvedMerged = r.duplicateResolution === 'merged_same_person' && Boolean(targetPtId);
+          const isResolvedSeparate = (r.duplicateResolution === 'separate_different_person' || isReady) && !isResolvedMerged;
 
           if (isResolvedMerged) {
             // Option 1: Merged Same Person -> Add new Practice Membership to existing Patient ID
@@ -830,7 +880,7 @@ if (duplicateReason) {
               committedRecordPatientMap.set(r.id, finalPtId);
             }
 
-          } else if (isResolvedSeparate || isReady) {
+          } else if (isResolvedSeparate) {
             const physicalNum = r.normalizedPc || '101';
 
             // Check if (practice + physicalFileNumber) ALREADY exists in DB
@@ -918,12 +968,19 @@ if (duplicateReason) {
           .run();
       })();
 
+      let message = `${importedPatientsCount} بیمار جدید با موفقیت وارد سیستم شدند.`;
+      if (importedPatientsCount > 0 && updatedMembershipsCount > 0) {
+        message = `${importedPatientsCount} پرونده جدید و ${updatedMembershipsCount} عضویت مطب ادغام‌شده با موفقیت ثبت شدند.`;
+      } else if (updatedMembershipsCount > 0) {
+        message = `${updatedMembershipsCount} عضویت مطب برای پرونده‌های موجود با موفقیت ادغام و ثبت شدند.`;
+      }
+
       return reply.send({
         success: true,
         data: {
           importedPatientsCount,
           updatedMembershipsCount,
-          message: `${importedPatientsCount} بیمار جدید با موفقیت وارد سیستم شدند.`
+          message
         }
       });
     } catch (error) {

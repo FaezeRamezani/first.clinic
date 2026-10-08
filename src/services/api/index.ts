@@ -9,6 +9,7 @@ export * from './financeApi';
 export * from './followUpsApi';
 export * from './onlineRequestsApi';
 export * from './importApi';
+export * from './depositsApi';
 
 
 

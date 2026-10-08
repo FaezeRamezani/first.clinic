@@ -68,6 +68,7 @@ export const financeApi = {
     paymentMethod?: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer';
     paymentAccountId?: string;
     posAccount?: string;
+    depositId?: string;
   }): Promise<any> => {
     return request<any>('/api/finance/obligations', {
       method: 'POST',

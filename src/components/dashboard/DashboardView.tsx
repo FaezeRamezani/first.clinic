@@ -9,7 +9,8 @@ import {
   CreditCard,
   CalendarX,
   XCircle,
-  Users
+  Users,
+  Wallet
 } from 'lucide-react';
 import { useClinic, hasPracticeMembership, getPatientFileNumberDisplay } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits, getTodayJalaliDate, toEnglishDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
@@ -22,6 +23,8 @@ export const DashboardView: React.FC = () => {
     patients,
     onlineRequests,
     transactions,
+    deposits,
+    openNewDeposit,
     updateAppointmentPresenceStatus,
     openQuickCheckout,
     openPaymentCollection,
@@ -36,6 +39,8 @@ export const DashboardView: React.FC = () => {
   const filteredAppointments = appointments.filter(a => scope === 'unified' || a.practice === scope);
   const filteredPatients = patients.filter(p => hasPracticeMembership(p, scope));
   const filteredOnlineRequests = onlineRequests.filter(r => scope === 'unified' || r.targetPractice === scope);
+  const filteredDeposits = deposits.filter(d => scope === 'unified' || d.practice === scope);
+  const activeDepositsCount = filteredDeposits.filter(d => d.status === 'active').length;
 
   // 2. Operational Summary Metrics & Strict Date Filter
   const todayJalali = getTodayJalaliDate();
@@ -70,9 +75,9 @@ export const DashboardView: React.FC = () => {
 
   // Helper to resolve current active due date and live remaining debt of a Financial Obligation
   const getObligationActiveDetails = (ob: any, allTrxs: any[]) => {
-    const linkedPayments = allTrxs.filter(t => 
-      t.trxType === 'payment' && 
-      (t.obligationId === ob.id || (ob.appointmentId && t.appointmentId === ob.appointmentId))
+    const linkedPayments = allTrxs.filter(t =>
+      t.trxType === 'payment' &&
+      (t.obligationId === ob.id || (ob.appointmentId && t.appointmentId === ob.appointmentId && t.receiptType !== 'deposit'))
     );
 
     const totalPaidOnObligation = (ob.paidAmount || 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);
@@ -110,7 +115,7 @@ export const DashboardView: React.FC = () => {
 
   // Presence & Status Renderer for Dashboard Table
   const renderPresenceButton = (apt: Appointment) => {
-    const hasOb = transactions.some(t => t.appointmentId === apt.id);
+    const hasOb = transactions.some(t => t.appointmentId === apt.id && t.trxType === 'service');
 
     if (hasOb || apt.status === 'completed') {
       return (
@@ -193,7 +198,7 @@ export const DashboardView: React.FC = () => {
     <div className="space-y-5 pb-12">
 
       {/* Operational Summary Cards (Fully Clickable & Interactive) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
         {/* Card 1: Today's / Selected Date Appointments */}
         <div
@@ -237,15 +242,11 @@ export const DashboardView: React.FC = () => {
 
         {/* Card 2: Online Requests */}
         <div
-          onClick={() => {
-            setAppointmentsTab('online_requests');
-            setActiveView('appointments');
-          }}
-          className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all group"
+          className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600 group-hover:text-indigo-600 transition-colors">درخواست‌های آنلاین</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+            <span className="text-xs font-bold text-slate-600">درخواست‌های آنلاین</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <Globe className="w-4 h-4" />
             </div>
           </div>
@@ -255,6 +256,34 @@ export const DashboardView: React.FC = () => {
             </div>
             <p className="text-[11px] font-medium text-slate-500 mt-1">
               نیازمند تایید/تعیین زمان
+            </p>
+          </div>
+        </div>
+
+        {/* Card 3: Pay Deposit (پرداخت بیعانه) */}
+        <div
+          onClick={() => openNewDeposit()}
+          className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5 cursor-pointer hover:border-emerald-400 hover:shadow-md transition-all group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-600 group-hover:text-emerald-600 transition-colors">
+              پرداخت بیعانه
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              <Wallet className="w-4 h-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-xl font-black text-emerald-600 flex items-center justify-between">
+              <span>
+                {toFarsiDigits(activeDepositsCount)} <span className="text-xs font-medium text-slate-500">بیعانه فعال</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 text-[10px] font-bold group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                + ثبت بیعانه
+              </span>
+            </div>
+            <p className="text-[11px] font-medium text-slate-500 mt-1">
+              ثبت پیش‌پرداخت برای نوبت یا خدمت آینده
             </p>
           </div>
         </div>
@@ -303,7 +332,7 @@ export const DashboardView: React.FC = () => {
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {todayAppointments.map((apt) => {
                       const isAesthetic = apt.practice === 'aesthetic';
-                      const hasOb = transactions.some(t => t.appointmentId === apt.id);
+                      const hasOb = transactions.some(t => t.appointmentId === apt.id && t.trxType === 'service');
                       // Clear visible warmer practice row tint
                       const rowClass = isAesthetic
                         ? 'bg-purple-100/70 hover:bg-purple-100/90 border-r-4 border-r-purple-600 text-purple-950'

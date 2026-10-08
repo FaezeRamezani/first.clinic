@@ -163,8 +163,50 @@ export interface FinancialTransaction {
   notes?: string;
   trxType?: 'service' | 'payment';
   obligationId?: string;
+  depositId?: string;
+  receiptType?: 'normal' | 'deposit' | 'refund' | 'deposit_allocation';
   currentPaidAmount?: number;
   currentRemainingDebt?: number;
+}
+
+export type DepositStatus = 'active' | 'applied' | 'fully_allocated' | 'refunded' | 'partially_applied' | 'partially_allocated' | 'partially_refunded';
+
+export interface DepositHistoryItem {
+  action: string;
+  timestamp: string;
+  date: string;
+  amount?: number;
+  details: string;
+  user?: string;
+}
+
+export interface Deposit {
+  id: string;
+  patientId: string;
+  patientName?: string;
+  patientMobile?: string;
+  fileNumber?: string;
+  memberships?: PracticeMembership[];
+  practice: 'aesthetic' | 'dental';
+  serviceId?: string;
+  serviceName?: string;
+  servicePrice?: number;
+  appointmentId?: string;
+  appointmentDate?: string;
+  appointmentTimeSlot?: string;
+  appointmentStatus?: string;
+  initialAmount: number;
+  remainingAmount: number;
+  status: DepositStatus;
+  paymentReceiptId?: string;
+  serviceObligationId?: string;
+  paymentMethod: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer';
+  paymentAccountId?: string;
+  posAccount: string;
+  paymentDate: string;
+  notes?: string;
+  history: DepositHistoryItem[];
+  createdAt: string;
 }
 
 export interface FollowUpTask {

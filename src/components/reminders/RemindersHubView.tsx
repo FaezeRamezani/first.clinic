@@ -178,7 +178,7 @@ export const RemindersHubView: React.FC = () => {
                 {todayVisits
                   .filter(a => matchSearch(a.patientName, a.patientMobile, a.fileNumber))
                   .map(apt => {
-                    const hasOb = transactions.some(t => t.appointmentId === apt.id);
+                    const hasOb = transactions.some(t => t.appointmentId === apt.id && t.trxType === 'service');
                     return (
                       <tr key={apt.id} className="hover:bg-slate-50/80">
                         <td className="py-3.5 px-4 font-bold text-slate-900 dir-ltr text-right">{toFarsiDigits(apt.timeSlot)}</td>

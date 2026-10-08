@@ -12,6 +12,7 @@ import { appointmentsRouter } from './modules/appointments/appointments.router';
 import { financeRouter } from './modules/finance/finance.router';
 import { followupsRouter } from './modules/followups/followups.router';
 import { onlineRequestsRouter } from './modules/onlineRequests/onlineRequests.router';
+import { depositsRouter } from './modules/deposits/deposits.router';
 
 import multipart from '@fastify/multipart';
 import { excelImportRouter } from './modules/import/excelImport.router';
@@ -78,6 +79,7 @@ await app.register(financeRouter, { prefix: '/api/finance' });
 await app.register(followupsRouter, { prefix: '/api/tasks' });
 await app.register(onlineRequestsRouter, { prefix: '/api/online-requests' });
 await app.register(excelImportRouter, { prefix: '/api/import' });
+await app.register(depositsRouter, { prefix: '/api/deposits' });
 
 
 // Start Server

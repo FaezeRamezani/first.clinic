@@ -165,7 +165,7 @@ export const ExcelImportView: React.FC = () => {
       await importApi.resolveDuplicate(
         resolvingRecord.id,
         resolution,
-        resolvingRecord.duplicateTargetPatientId || undefined
+        resolvingRecord.duplicateTargetPatientId || resolvingRecord.matchedPatient?.id || undefined
       );
       setResolvingRecord(null);
       await refreshImportRecords();
@@ -685,17 +685,21 @@ export const ExcelImportView: React.FC = () => {
                                   </span>
                                 ))
                               )}
-                              {r.category === 'duplicate' && (
-                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                                  r.duplicateResolution === 'merged_same_person'
-                                    ? 'bg-emerald-100 text-emerald-900'
-                                    : r.duplicateResolution === 'separate_different_person'
-                                    ? 'bg-blue-100 text-blue-900'
-                                    : 'bg-purple-100 text-purple-900 border border-purple-300'
-                                }`}>
-                                  {r.duplicateResolution === 'merged_same_person' && 'تأیید ادغام (یک نفر)'}
-                                  {r.duplicateResolution === 'separate_different_person' && 'تأیید پرونده مستقل (دو نفر)'}
-                                  {r.duplicateResolution === 'unresolved' && 'مشکوک به تکرار (نیازمند تعیین تکلیف)'}
+                              {r.duplicateResolution === 'merged_same_person' && (
+                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-md text-[10px] font-extrabold flex items-center gap-1">
+                                  <UserCheck className="w-3 h-3 text-emerald-700" />
+                                  <span>تأیید ادغام (یک نفر)</span>
+                                </span>
+                              )}
+                              {r.duplicateResolution === 'separate_different_person' && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-900 border border-blue-300 rounded-md text-[10px] font-extrabold flex items-center gap-1">
+                                  <Users className="w-3 h-3 text-blue-700" />
+                                  <span>تأیید پرونده مستقل (دو نفر)</span>
+                                </span>
+                              )}
+                              {r.category === 'duplicate' && r.duplicateResolution === 'unresolved' && (
+                                <span className="px-2 py-0.5 bg-purple-100 text-purple-900 border border-purple-300 rounded-md text-[10px] font-extrabold">
+                                  مشکوک به تکرار (نیازمند تعیین تکلیف)
                                 </span>
                               )}
                             </div>
@@ -712,13 +716,26 @@ export const ExcelImportView: React.FC = () => {
                                   <span>بررسی تکرار</span>
                                 </button>
                               ) : (
-                                <button
-                                  onClick={() => openEditModal(r)}
-                                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
-                                >
-                                  <Edit3 className="w-3 h-3 text-slate-500" />
-                                  <span>اصلاح داده</span>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => openEditModal(r)}
+                                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                    title="اصلاح اطلاعات"
+                                  >
+                                    <Edit3 className="w-3 h-3 text-slate-500" />
+                                    <span>اصلاح داده</span>
+                                  </button>
+                                  {r.duplicateResolution !== 'unresolved' && (
+                                    <button
+                                      onClick={() => setResolvingRecord(r)}
+                                      className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                                      title="تغییر تصمیم تشابه"
+                                    >
+                                      <GitMerge className="w-3 h-3 text-purple-600" />
+                                      <span>تغییر تصمیم</span>
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </td>

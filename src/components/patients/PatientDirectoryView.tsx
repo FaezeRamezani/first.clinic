@@ -24,6 +24,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { PatientDetailModal } from './PatientDetailModal';
+import { DepositsTableView } from './DepositsTableView';
 import type { PracticeType } from '../../types';
 
 type SortField = 'fileNumber' | 'name' | 'mobile' | 'nationalId' | 'balance';
@@ -49,12 +50,15 @@ export const PatientDirectoryView: React.FC = () => {
   const {
     scope,
     patients,
+    deposits,
     setSelectedPatient,
     selectedPatient,
     setIsNewPatientOpen,
     openNewAppointment,
     openPaymentCollection
   } = useClinic();
+
+  const [activeTab, setActiveTab] = useState<'patients' | 'deposits'>('patients');
 
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -303,9 +307,53 @@ export const PatientDirectoryView: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Top Tab Switcher: Patients Directory vs Deposits */}
+      <div className="flex items-center gap-2 bg-slate-200/70 p-1 rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveTab('patients')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'patients'
+              ? 'bg-white text-indigo-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4 text-indigo-600" />
+          <span>پرونده‌های بیماران</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            activeTab === 'patients' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {toFarsiDigits(scopePatients.length)}
+          </span>
+        </button>
 
-      {/* Header & Search / Filter Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
+        <button
+          onClick={() => setActiveTab('deposits')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'deposits'
+              ? 'bg-white text-indigo-900 shadow-xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <CreditCard className="w-4 h-4 text-indigo-600" />
+          <span>بیعانه‌ها</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            activeTab === 'deposits' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-700'
+          }`}>
+            {toFarsiDigits(
+              scope === 'unified'
+                ? deposits.length
+                : deposits.filter(d => d.practice === scope).length
+            )}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'deposits' ? (
+        <DepositsTableView />
+      ) : (
+        <>
+          {/* Header & Search / Filter Controls */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
           <h2 className="text-lg font-bold text-slate-800">بانک جامع پرونده‌های دیجیتال بیماران</h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -968,6 +1016,8 @@ export const PatientDirectoryView: React.FC = () => {
           patient={selectedPatient}
           onClose={() => setSelectedPatient(null)}
         />
+      )}
+        </>
       )}
 
     </div>

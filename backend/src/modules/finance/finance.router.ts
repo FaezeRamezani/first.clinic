@@ -2,10 +2,12 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db, sqlite } from '../../config/database';
 import { financialObligations, paymentReceipts } from '../../db/schema/finance';
+import { appointments } from '../../db/schema/appointments';
 import { expenses } from '../../db/schema/expenses';
 import { patients, patientPracticeMemberships } from '../../db/schema/patients';
 import { services } from '../../db/schema/services';
 import { paymentAccounts } from '../../db/schema/paymentAccounts';
+import { deposits } from '../../db/schema/deposits';
 import { eq, and } from 'drizzle-orm';
 import { toStandardJalaliDbDate } from '../../utils/dateUtils';
 import { sanitizeFreeText } from '../../utils/validation';
@@ -33,7 +35,8 @@ const createObligationSchema = z.object({
   paymentMethod: z.enum(['cash', 'pos_aesthetic', 'pos_dental', 'card_transfer']).optional(),
   paymentAccountId: z.string().optional().nullable(),
   posAccount: z.string().optional().nullable(),
-  timestamp: z.string().optional().nullable()
+  timestamp: z.string().optional().nullable(),
+  depositId: z.string().optional().nullable()
 });
 
 const createPaymentSchema = z.object({
@@ -174,6 +177,15 @@ function buildFormattedTransactions() {
       }
     }
 
+    let displayServiceName = r.paidAmount > 0 ? 'دریافت / وصول قسط بیمار' : 'تعیین سررسید بدهی بیمار';
+    if (r.receiptType === 'deposit') {
+      displayServiceName = r.notes || 'دریافت بیعانه بیمار';
+    } else if (r.receiptType === 'refund') {
+      displayServiceName = r.notes || 'استرداد بیعانه به بیمار';
+    } else if (r.receiptType === 'deposit_allocation') {
+      displayServiceName = r.notes || 'تخصیص بیعانه به خدمت';
+    }
+
     result.push({
       id: r.id,
       patientId: r.patientId,
@@ -184,7 +196,7 @@ function buildFormattedTransactions() {
       date: r.recordDate,
       serviceDate: r.serviceDate || r.recordDate,
       timestamp: r.timestamp || '12:00',
-      serviceName: r.paidAmount > 0 ? 'دریافت / وصول قسط بیمار' : 'تعیین سررسید بدهی بیمار',
+      serviceName: displayServiceName,
       totalCost: 0,
       discount: 0,
       netCost: 0,
@@ -196,7 +208,9 @@ function buildFormattedTransactions() {
       lastActionDate: r.recordDate,
       notes: r.notes || undefined,
       trxType: 'payment',
-      obligationId: r.obligationId || undefined
+      obligationId: r.obligationId || undefined,
+      depositId: r.depositId || undefined,
+      receiptType: r.receiptType || 'normal'
     });
   }
 
@@ -475,12 +489,35 @@ export async function financeRouter(fastify: FastifyInstance) {
         }
       }
 
+      // Check if a deposit is applied at checkout
+      let appliedDepositAmount = 0;
+      let matchedDeposit: typeof deposits.$inferSelect | null = null;
+      if (data.depositId) {
+        matchedDeposit = db.select().from(deposits).where(eq(deposits.id, data.depositId)).get() || null;
+        if (matchedDeposit) {
+          if (matchedDeposit.patientId !== data.patientId || matchedDeposit.practice !== data.practice) {
+            return reply.status(400).send({
+              success: false,
+              error: 'بیعانه انتخاب‌شده متعلق به این بیمار و مطب نیست.'
+            });
+          }
+          if (matchedDeposit.remainingAmount <= 0 || matchedDeposit.status === 'applied' || matchedDeposit.status === 'refunded') {
+            return reply.status(400).send({
+              success: false,
+              error: 'این بیعانه مانده قابل تخصیص ندارد.'
+            });
+          }
+          appliedDepositAmount = Math.min(matchedDeposit.remainingAmount, netCost);
+        }
+      }
+
       // Initial Payment Overpayment check
+      const remainingPayable = Math.max(0, netCost - appliedDepositAmount);
       const initialPaid = data.paidAmount || 0;
-      if (initialPaid > netCost) {
+      if (initialPaid > remainingPayable) {
         return reply.status(400).send({
           success: false,
-          error: 'مبلغ دریافت‌شده نمی‌تواند بیشتر از بدهی باقیمانده باشد.'
+          error: `مبلغ دریافت‌شده نمی‌تواند بیشتر از باقیمانده قابل تسویه (${remainingPayable.toLocaleString('fa-IR')} تومان) باشد.`
         });
       }
 
@@ -518,6 +555,69 @@ export async function financeRouter(fastify: FastifyInstance) {
             notes: data.notes || null
           }).run();
 
+          // Apply Deposit to this obligation if selected
+          if (matchedDeposit && appliedDepositAmount > 0) {
+            const timeStr = data.timestamp || '12:00';
+            let depHistory: any[] = [];
+            try { depHistory = JSON.parse(matchedDeposit.history || '[]'); } catch { depHistory = []; }
+
+            const initReceipt = db.select().from(paymentReceipts).where(eq(paymentReceipts.id, matchedDeposit.paymentReceiptId || '')).get();
+
+            if (initReceipt && !initReceipt.obligationId && appliedDepositAmount === matchedDeposit.initialAmount) {
+              // 100% of initial receipt applied
+              db.update(paymentReceipts).set({
+                obligationId: obId,
+                serviceDate: srvDate
+              }).where(eq(paymentReceipts.id, initReceipt.id)).run();
+            } else {
+              // Allocation tracking receipt
+              const allocReceiptId = `alloc-${matchedDeposit.id}-${Date.now()}`;
+              db.insert(paymentReceipts).values({
+                id: allocReceiptId,
+                obligationId: obId,
+                patientId: data.patientId,
+                appointmentId: data.appointmentId || matchedDeposit.appointmentId || null,
+                practice: data.practice,
+                recordDate: recDate,
+                serviceDate: srvDate,
+                paidAmount: appliedDepositAmount,
+                paymentMethod: matchedDeposit.paymentMethod,
+                paymentAccountId: matchedDeposit.paymentAccountId || null,
+                posAccount: `تخصیص بیعانه (${matchedDeposit.posAccount || 'صندوق'})`,
+                timestamp: timeStr,
+                notes: `اعمال مبلغ ${appliedDepositAmount.toLocaleString('fa-IR')} تومان بیعانه روی خدمت ${data.serviceName}`,
+                depositId: matchedDeposit.id,
+                receiptType: 'deposit_allocation'
+              }).run();
+
+              if (initReceipt && !initReceipt.obligationId) {
+                db.update(paymentReceipts).set({
+                  paidAmount: Math.max(0, initReceipt.paidAmount - appliedDepositAmount)
+                }).where(eq(paymentReceipts.id, initReceipt.id)).run();
+              }
+            }
+
+            const newRemaining = matchedDeposit.remainingAmount - appliedDepositAmount;
+            const newStatus = newRemaining === 0 ? 'applied' : 'partially_applied';
+
+            depHistory.push({
+              action: 'applied_at_checkout',
+              timestamp: timeStr,
+              date: recDate,
+              amount: appliedDepositAmount,
+              details: `اعمال مبلغ ${appliedDepositAmount.toLocaleString('fa-IR')} تومان بیعانه در زمان ثبت خدمت ${data.serviceName}`
+            });
+
+            db.update(deposits).set({
+              remainingAmount: newRemaining,
+              status: newStatus,
+              serviceObligationId: obId,
+              history: JSON.stringify(depHistory)
+            }).where(eq(deposits.id, matchedDeposit.id)).run();
+          }
+
+          const finalRemainingDebt = Math.max(0, netCost - appliedDepositAmount - initialPaid);
+
           // Create Initial Payment Receipt if paidAmount > 0
           if (initialPaid > 0) {
             const receiptId = `pay-${obId}-${Date.now()}`;
@@ -535,9 +635,17 @@ export async function financeRouter(fastify: FastifyInstance) {
               paymentAccountId: data.paymentAccountId || null,
               posAccount: data.posAccount || (method === 'cash' ? 'نقد' : 'کارتخوان'),
               timestamp: data.timestamp || '12:00',
-              debtDueDate: (netCost - initialPaid > 0) ? effectiveDueDate : null,
+              debtDueDate: finalRemainingDebt > 0 ? effectiveDueDate : null,
               notes: data.notes || 'پرداخت اولیه هنگام ثبت خدمت'
             }).run();
+          }
+
+          // If linked to an appointment, mark it completed and presence as present upon settlement
+          if (data.appointmentId) {
+            db.update(appointments).set({
+              status: 'completed',
+              presenceStatus: 'present'
+            }).where(eq(appointments.id, data.appointmentId)).run();
           }
         })();
       } catch (txnErr: any) {
@@ -551,8 +659,9 @@ export async function financeRouter(fastify: FastifyInstance) {
           patientId: data.patientId,
           practice: data.practice,
           netCost,
+          appliedDepositAmount,
           paidAmount: initialPaid,
-          remainingDebt: Math.max(0, netCost - initialPaid),
+          remainingDebt: Math.max(0, netCost - appliedDepositAmount - initialPaid),
           dueDate: effectiveDueDate
         }
       });

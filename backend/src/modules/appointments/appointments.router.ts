@@ -346,8 +346,8 @@ export async function appointmentsRouter(fastify: FastifyInstance) {
     }
   });
 
-  // PATCH /api/appointments/:id
-  fastify.patch('/:id', async (request, reply) => {
+  // PATCH / PUT /api/appointments/:id
+  fastify.route({ method: ['PATCH', 'PUT'], url: '/:id', handler: async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const targetApt = db.select().from(appointments).where(eq(appointments.id, id)).get();
@@ -445,5 +445,5 @@ export async function appointmentsRouter(fastify: FastifyInstance) {
         error: 'خطا در ویرایش نوبت'
       });
     }
-  });
+  } });
 }

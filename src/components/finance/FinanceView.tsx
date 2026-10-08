@@ -230,7 +230,7 @@ export const FinanceView: React.FC = () => {
                   const patTrxs = transactions.filter(t => t.patientId === pat.id);
                   const targetTrx = patTrxs.find(t => t.trxType !== 'payment' && ((t.currentRemainingDebt !== undefined ? t.currentRemainingDebt : t.remainingDebt) > 0 || t.lastActionDate === selectedDate)) || patTrxs.find(t => t.trxType !== 'payment');
                   const linkedPayments = targetTrx 
-                    ? patTrxs.filter(t => t.trxType === 'payment' && (t.obligationId === targetTrx.id || (t.appointmentId && t.appointmentId === targetTrx.appointmentId)))
+                    ? patTrxs.filter(t => t.trxType === 'payment' && (t.obligationId === targetTrx.id || (t.appointmentId && t.appointmentId === targetTrx.appointmentId && t.receiptType !== 'deposit')))
                     : patTrxs.filter(t => t.trxType === 'payment');
 
                   const totalPaidSoFar = (targetTrx?.paidAmount || 0) + linkedPayments.reduce((sum, p) => sum + p.paidAmount, 0);

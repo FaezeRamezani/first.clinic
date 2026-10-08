@@ -19,6 +19,8 @@ import { FollowUpResultModal } from './components/modals/FollowUpResultModal';
 import { NewPatientModal } from './components/modals/NewPatientModal';
 import { NewExpenseModal } from './components/modals/NewExpenseModal';
 import { CancelAppointmentModal } from './components/modals/CancelAppointmentModal';
+import { NewDepositModal } from './components/modals/NewDepositModal';
+import { DepositDetailModal } from './components/modals/DepositDetailModal';
 
 import { PatientDetailModal } from './components/patients/PatientDetailModal';
 
@@ -85,6 +87,8 @@ const MainContent: React.FC = () => {
       <NewPatientModal />
       <NewExpenseModal />
       <CancelAppointmentModal />
+      <NewDepositModal />
+      <DepositDetailModal />
     </div>
   );
 };

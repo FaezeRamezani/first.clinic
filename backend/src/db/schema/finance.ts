@@ -34,5 +34,7 @@ export const paymentReceipts = sqliteTable('payment_receipts', {
   posAccount: text('pos_account'), // Label text e.g. "بانک ایران زمین"
   timestamp: text('timestamp'), // e.g. "14:30"
   debtDueDate: text('debt_due_date'), // Jalali YYYY-MM-DD
-  notes: text('notes')
+  notes: text('notes'),
+  depositId: text('deposit_id'),
+  receiptType: text('receipt_type').default('normal') // 'normal' | 'deposit' | 'refund'
 });

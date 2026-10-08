@@ -27,6 +27,42 @@ try {
   // column already exists
 }
 
+// Ensure deposits table exists
+try {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS deposits (
+      id TEXT PRIMARY KEY NOT NULL,
+      patient_id TEXT NOT NULL REFERENCES patients(id),
+      practice TEXT NOT NULL,
+      service_id TEXT REFERENCES services(id),
+      appointment_id TEXT REFERENCES appointments(id),
+      initial_amount INTEGER NOT NULL,
+      remaining_amount INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      payment_receipt_id TEXT,
+      service_obligation_id TEXT,
+      payment_method TEXT NOT NULL,
+      payment_account_id TEXT REFERENCES payment_accounts(id),
+      pos_account TEXT,
+      payment_date TEXT NOT NULL,
+      notes TEXT,
+      history TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+} catch (e) {
+  console.error('Error ensuring deposits table:', e);
+}
+
+// Ensure deposit_id and receipt_type columns in payment_receipts
+try {
+  sqlite.exec('ALTER TABLE payment_receipts ADD COLUMN deposit_id TEXT;');
+} catch (_) {}
+
+try {
+  sqlite.exec("ALTER TABLE payment_receipts ADD COLUMN receipt_type TEXT DEFAULT 'normal';");
+} catch (_) {}
+
 // Drizzle ORM Instance
 export const db = drizzle(sqlite, { schema });
 

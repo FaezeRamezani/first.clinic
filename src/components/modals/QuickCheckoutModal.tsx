@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useClinic, PRACTICE_PAYMENT_ACCOUNTS, getPatientFileNumberDisplay } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits, getTodayJalaliDate, getJalaliDateOffset } from '../../utils/persianUtils';
-import { X, CalendarPlus } from 'lucide-react';
+import { X, CalendarPlus, CreditCard } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
 import { SearchableServiceSelect } from '../common/SearchableServiceSelect';
@@ -16,6 +16,7 @@ export const QuickCheckoutModal: React.FC = () => {
     doctors,
     appointments,
     patients,
+    deposits,
     recordCheckout,
     addAppointment,
     checkAppointmentConflict,
@@ -38,6 +39,15 @@ export const QuickCheckoutModal: React.FC = () => {
   const [posAccount, setPosAccount] = useState<string>('');
   const [debtDueDate, setDebtDueDate] = useState<string>(getJalaliDateOffset(getTodayJalaliDate(), 10));
   const [notes, setNotes] = useState<string>('');
+  const [applyDeposit, setApplyDeposit] = useState<boolean>(false);
+
+  // Active deposit lookup
+  const activeDeposit = deposits.find(
+    d => d.patientId === apt?.patientId &&
+         d.practice === targetPractice &&
+         (d.status === 'active' || d.status === 'partially_allocated' || d.status === 'partially_applied') &&
+         d.remainingAmount > 0
+  );
 
   // Follow-up Visit States
   const [isFollowUpVisitEnabled, setIsFollowUpVisitEnabled] = useState<boolean>(false);
@@ -72,6 +82,22 @@ export const QuickCheckoutModal: React.FC = () => {
       const accounts = PRACTICE_PAYMENT_ACCOUNTS[scope] || PRACTICE_PAYMENT_ACCOUNTS.aesthetic;
       setPosAccount(accounts[0] || 'کارتخوان');
 
+      // Check for active deposit
+      const foundDeposit = deposits.find(
+        d => d.patientId === apt.patientId &&
+             d.practice === scope &&
+             (d.status === 'active' || d.status === 'partially_allocated' || d.status === 'partially_applied') &&
+             d.remainingAmount > 0
+      );
+      if (foundDeposit) {
+        setApplyDeposit(true);
+        const srvPrice = matchedService ? matchedService.price : 0;
+        const deduction = Math.min(foundDeposit.remainingAmount, srvPrice);
+        setPaidAmount(Math.max(0, srvPrice - deduction));
+      } else {
+        setApplyDeposit(false);
+      }
+
       // Always reset temporary follow-up / next visit states on open/appointment change
       setIsFollowUpVisitEnabled(false);
       setNextVisitDate(getJalaliDateOffset(getTodayJalaliDate(), 14));
@@ -80,7 +106,7 @@ export const QuickCheckoutModal: React.FC = () => {
       setNextVisitServiceId('');
       setNextVisitError('');
     }
-  }, [isQuickCheckoutOpen, apt, services, doctors]);
+  }, [isQuickCheckoutOpen, apt, services, doctors, deposits]);
 
   if (!isQuickCheckoutOpen || !apt) return null;
 
@@ -89,8 +115,9 @@ export const QuickCheckoutModal: React.FC = () => {
     const srv = validServices.find(s => s.id === srvId);
     if (srv) {
       setTotalCost(srv.price);
-      setPaidAmount(srv.price);
       setDiscount(0);
+      const deduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, srv.price) : 0;
+      setPaidAmount(Math.max(0, srv.price - deduction));
       const termDays = srv.defaultPaymentTermDays && srv.defaultPaymentTermDays > 0 ? srv.defaultPaymentTermDays : 10;
       setDebtDueDate(getJalaliDateOffset(getTodayJalaliDate(), termDays));
     } else {
@@ -118,7 +145,9 @@ export const QuickCheckoutModal: React.FC = () => {
   };
 
   const netCost = Math.max(0, totalCost - discount);
-  const remainingDebt = Math.max(0, netCost - paidAmount);
+  const depositDeduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, netCost) : 0;
+  const payableAfterDeposit = Math.max(0, netCost - depositDeduction);
+  const remainingDebt = Math.max(0, payableAfterDeposit - paidAmount);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,7 +176,8 @@ export const QuickCheckoutModal: React.FC = () => {
       paymentMethod,
       posAccount,
       debtDueDate: remainingDebt > 0 ? debtDueDate : undefined,
-      notes
+      notes,
+      depositId: (applyDeposit && activeDeposit) ? activeDeposit.id : undefined
     });
 
     // Handle Follow-up Next Visit Appointment creation if requested
@@ -206,6 +236,50 @@ export const QuickCheckoutModal: React.FC = () => {
               />
             </div>
 
+            {/* Active Deposit Notification Banner */}
+            {activeDeposit && (
+              <div className="p-3.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-200 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <div>
+                      <span className="font-bold text-slate-800 block text-xs">
+                        بیعانه فعال موجود: {formatCurrency(activeDeposit.remainingAmount)}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        پرداخت‌شده در تاریخ {toFarsiDigits(activeDeposit.paymentDate)} ({activeDeposit.practice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'})
+                      </span>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-indigo-200 hover:border-indigo-400 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={applyDeposit}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setApplyDeposit(checked);
+                        if (checked) {
+                          const deduction = Math.min(activeDeposit.remainingAmount, netCost);
+                          const remainingToPay = Math.max(0, netCost - deduction);
+                          setPaidAmount(remainingToPay);
+                        } else {
+                          setPaidAmount(netCost);
+                        }
+                      }}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span className="font-bold text-indigo-900 text-xs">اعمال بیعانه</span>
+                  </label>
+                </div>
+                {applyDeposit && (
+                  <div className="text-[11px] font-semibold text-indigo-700 bg-white/70 p-2 rounded-xl flex items-center justify-between">
+                    <span>کسر از صورتحساب: {formatCurrency(depositDeduction)}</span>
+                    <span>مانده قابل تسویه: {formatCurrency(payableAfterDeposit)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Pricing Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
               <div>
@@ -229,9 +303,11 @@ export const QuickCheckoutModal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-indigo-700 mb-1 text-[11px]">قابل پرداخت نهایی:</label>
+                <label className="block font-bold text-indigo-700 mb-1 text-[11px]">
+                  {applyDeposit && depositDeduction > 0 ? 'مانده قابل تسویه:' : 'قابل پرداخت نهایی:'}
+                </label>
                 <div className="w-full bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-1.5 text-indigo-900 font-extrabold text-xs text-left dir-ltr">
-                  {formatCurrency(netCost)}
+                  {formatCurrency(payableAfterDeposit)}
                 </div>
               </div>
             </div>
