@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useClinic, hasPracticeMembership, getPhysicalFileNumber } from '../../context/ClinicContext';
-import { formatCurrency, toFarsiDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
+import { formatCurrency, formatMoneyNumber, toFarsiDigits, formatJalaliDateDisplay } from '../../utils/persianUtils';
 import { validatePhysicalFileNumber, validatePersianName, validateIranianMobile, validateIranianNationalId } from '../../utils/validation';
 import { patientsApi } from '../../services/api';
 import { 
@@ -231,13 +231,16 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
 
             {/* Balance Badge */}
             <div className="text-left bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
-              <p className="text-[10px] text-slate-400 font-semibold">وضعیت حساب بیمار:</p>
-              <p className={`text-xs font-black ${
+              <p className="text-[10px] text-slate-400 font-semibold">مانده حساب:</p>
+              <p className={`text-xs font-black inline-flex items-center gap-1 ${
                 currentPatient.balance < 0 ? 'text-rose-400' : currentPatient.balance > 0 ? 'text-emerald-400' : 'text-slate-300'
               }`}>
-                {currentPatient.balance < 0 && `بدهکار (${formatCurrency(Math.abs(currentPatient.balance))})`}
-                {currentPatient.balance > 0 && `بستانکار (${formatCurrency(currentPatient.balance)})`}
-                {currentPatient.balance === 0 && 'تسویه کامل'}
+                <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                  {currentPatient.balance < 0
+                    ? `-${formatMoneyNumber(Math.abs(currentPatient.balance))}`
+                    : formatMoneyNumber(currentPatient.balance || 0)}
+                </span>
+                <span>تومان</span>
               </p>
             </div>
 

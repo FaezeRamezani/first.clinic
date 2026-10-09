@@ -135,13 +135,8 @@ function formatPatientData(p: typeof patients.$inferSelect, memberships: (typeof
   const allReceipts = db.select().from(paymentReceipts).where(eq(paymentReceipts.patientId, p.id)).all();
   const totalObligationNet = allObligations.reduce((sum, o) => sum + (o.netCost || 0), 0);
   
-  // Independent Deposit Rule: unallocated deposit receipts do NOT reduce previous debts or inflate general patient balance
-  const generalReceipts = allReceipts.filter(r => {
-    if (r.obligationId) return true; // Tied/applied to a service obligation
-    if (r.depositId) return false;   // Unallocated deposit or deposit refund
-    return true;                     // Standard receipt
-  });
-  const totalPaid = generalReceipts.reduce((sum, r) => sum + (r.paidAmount || 0), 0);
+  // Unified Patient Account Balance: all receipts (normal, deposit, refund, allocation) directly reflect in patient balance
+  const totalPaid = allReceipts.reduce((sum, r) => sum + (r.paidAmount || 0), 0);
   const derivedBalance = totalPaid - totalObligationNet;
 
   return {

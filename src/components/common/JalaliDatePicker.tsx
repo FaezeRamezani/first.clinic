@@ -79,7 +79,7 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
   };
 
   const daysInMonth = moment.jDaysInMonth(jYear, jMonth);
-  
+
   // Find weekday index of day 1 of month (0 = Saturday, ..., 6 = Friday)
   const firstDayStr = `${jYear}-${(jMonth + 1).toString().padStart(2, '0')}-01`;
   const firstDayMoment = moment(firstDayStr, 'jYYYY-jMM-jDD');
@@ -117,15 +117,14 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
       )}
 
       {/* Input Box Trigger */}
-      <div 
+      <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`flex items-center justify-between border rounded-xl px-3 py-2 text-xs font-bold transition-all cursor-pointer select-none ${
-          disabled 
-            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' 
-            : isOpen 
-              ? 'bg-white border-indigo-500 ring-2 ring-indigo-100 text-slate-800' 
+        className={`flex items-center justify-between border rounded-xl px-3 py-2 text-xs font-bold transition-all cursor-pointer select-none ${disabled
+            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+            : isOpen
+              ? 'bg-white border-indigo-500 ring-2 ring-indigo-100 text-slate-800'
               : 'bg-slate-50 border-slate-300 hover:border-indigo-400 text-slate-800'
-        }`}
+          }`}
       >
         <div className="flex items-center gap-2">
           <CalendarIcon className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -149,10 +148,9 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
 
       {/* Interactive Jalali Calendar Popover Dropdown */}
       {isOpen && (
-        <div className={`absolute z-50 right-0 bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 w-64 text-xs animate-in fade-in zoom-in-95 duration-150 select-none ${
-          openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-        }`}>
-          
+        <div className={`absolute z-50 right-0 bg-white border border-slate-200 rounded-2xl shadow-2xl p-3 w-64 text-xs animate-in fade-in zoom-in-95 duration-150 select-none ${openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+          }`}>
+
           {/* Calendar Header: Year & Month Navigation */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
             <button
@@ -210,15 +208,14 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
                   type="button"
                   disabled={isDisabled}
                   onClick={() => handleSelectDay(dayNum)}
-                  className={`p-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isDisabled
+                  className={`p-1.5 rounded-lg text-xs font-bold transition-all ${isDisabled
                       ? 'text-slate-300 opacity-40 cursor-not-allowed pointer-events-none hover:bg-transparent'
                       : isSelected
                         ? 'bg-indigo-600 text-white shadow-2xs font-extrabold scale-105 cursor-pointer'
                         : isToday
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold cursor-pointer'
                           : 'hover:bg-slate-100 text-slate-700 cursor-pointer'
-                  }`}
+                    }`}
                 >
                   {toFarsiDigits(dayNum)}
                 </button>
@@ -242,12 +239,11 @@ export const JalaliDatePicker: React.FC<JalaliDatePickerProps> = ({
                 onChange(toFarsiDigits(todayM.format('jYYYY-jMM-jDD')));
                 setIsOpen(false);
               }}
-              className={`font-bold ${
-                (normalizedMinDate && normalizedToday < normalizedMinDate) ||
-                (normalizedMaxDate && normalizedToday > normalizedMaxDate)
+              className={`font-bold ${(normalizedMinDate && normalizedToday < normalizedMinDate) ||
+                  (normalizedMaxDate && normalizedToday > normalizedMaxDate)
                   ? 'text-slate-300 cursor-not-allowed opacity-50'
                   : 'text-indigo-600 hover:underline cursor-pointer'
-              }`}
+                }`}
             >
               انتخاب امروز ({toFarsiDigits(normalizedToday)})
             </button>

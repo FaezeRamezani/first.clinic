@@ -290,8 +290,8 @@ export const DashboardView: React.FC = () => {
 
       </div>
 
-      {/* Main Operational Tables Grid — Responsive 2 Columns (xl:grid-cols-2 min-w-0) */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 min-w-0">
+      {/* Main Operational Tables Grid — Responsive 2 Columns (2xl:grid-cols-2 min-w-0) */}
+      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-5 min-w-0">
 
         {/* Table 1: Today's Appointments & Operational Flow */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 space-y-3 flex flex-col justify-between min-w-0">

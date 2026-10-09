@@ -764,23 +764,17 @@ export async function financeRouter(fastify: FastifyInstance) {
             const net = ob.totalCost - ob.discount;
             const currentRemaining = Math.max(0, net - totalPaidSoFar);
 
-            // Overpayment protection
-            if (currentRemaining === 0) {
-              throw new Error('OVERPAYMENT:بدهی مربوط به این نوبت/تعهد قبلاً کاملاً تسویه شده است.');
-            }
-            if (paymentAmt > currentRemaining) {
-              throw new Error('OVERPAYMENT:مبلغ دریافت‌شده نمی‌تواند بیشتر از بدهی باقیمانده باشد.');
-            }
-
+            // If payment exceeds this specific obligation's remaining debt, the obligation is fully settled
+            // and the excess amount naturally remains as general credit in the patient's unified account balance.
             remainingAfter = Math.max(0, currentRemaining - paymentAmt);
 
-            // If debtDueDate is provided, update obligation.dueDate
-            if (data.debtDueDate) {
+            // If debtDueDate is provided and obligation still has remaining debt, update obligation.dueDate
+            if (data.debtDueDate && remainingAfter > 0) {
               const newDue = toStandardJalaliDbDate(data.debtDueDate);
               db.update(financialObligations).set({ dueDate: newDue }).where(eq(financialObligations.id, ob.id)).run();
             }
           } else {
-            // No obligation exists (or general prepayment)
+            // No obligation exists (or general prepayment/credit)
             remainingAfter = 0;
           }
 

@@ -1,19 +1,44 @@
 
-const API_BASE = 'http://127.0.0.1:3000/api';
-
-async function request(url: string, options: any = {}) {
-  const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
-  const json = await res.json();
-  return { status: res.status, ok: res.ok, data: json };
-}
+import Fastify from 'fastify';
+import { createIsolatedTestDb } from './test_helpers/testDb';
 
 async function runValidationTests() {
   console.log('====================================================');
   console.log('STARTING TESTS: A, B, C AND DEPOSIT LINK REGRESSION');
   console.log('====================================================\n');
+
+  // Initialize isolated temporary database
+  const testEnv = await createIsolatedTestDb('scenarios_a_b_c');
+
+  // Dynamically load routers bound to the isolated database
+  const { doctorsRouter } = await import('./modules/doctors/doctors.router');
+  const { servicesRouter } = await import('./modules/services/services.router');
+  const { patientsRouter } = await import('./modules/patients/patients.router');
+  const { appointmentsRouter } = await import('./modules/appointments/appointments.router');
+  const { financeRouter } = await import('./modules/finance/finance.router');
+  const { depositsRouter } = await import('./modules/deposits/deposits.router');
+
+  const app = Fastify({ logger: false });
+  await app.register(doctorsRouter, { prefix: '/api/doctors' });
+  await app.register(servicesRouter, { prefix: '/api/services' });
+  await app.register(patientsRouter, { prefix: '/api/patients' });
+  await app.register(appointmentsRouter, { prefix: '/api/appointments' });
+  await app.register(financeRouter, { prefix: '/api/finance' });
+  await app.register(depositsRouter, { prefix: '/api/deposits' });
+  await app.ready();
+
+  async function request(url: string, options: any = {}) {
+    const res = await app.inject({
+      method: (options.method || 'GET') as any,
+      url: `/api${url}`,
+      payload: options.body ? JSON.parse(options.body) : undefined,
+      headers: options.headers
+    });
+    const json = JSON.parse(res.body);
+    return { status: res.statusCode, ok: res.statusCode >= 200 && res.statusCode < 300, data: json };
+  }
+
+  try {
 
   // Find or create doctor and service
   const docsRes = await request('/doctors');
@@ -318,6 +343,10 @@ async function runValidationTests() {
   console.log(`تست C (نوبت بدون بیعانه): ${passedC ? 'موفق ✅' : 'ناموفق ❌'}`);
   console.log(`تست رگرسیون اتصال بیعانه به نوبت: ${passedRegression ? 'موفق ✅' : 'ناموفق ❌'}`);
   console.log('====================================================');
+  } finally {
+    await app.close();
+    testEnv.cleanup();
+  }
 }
 
 runValidationTests().catch(err => {

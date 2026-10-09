@@ -74,7 +74,6 @@ export const TopBar: React.FC = () => {
       {/* Middle: Jalali Date Picker for Dashboard & Time Display */}
       <div className="hidden lg:flex items-center gap-3 bg-slate-100/70 border border-slate-200 px-3 py-1 rounded-xl text-xs font-medium text-slate-700">
         <div className="flex items-center gap-2 text-slate-600">
-          <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
           <div className="w-36">
             <JalaliDatePicker
               value={dashboardDate || todayStr}

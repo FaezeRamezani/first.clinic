@@ -65,7 +65,7 @@ const MainContent: React.FC = () => {
         <Sidebar />
 
         {/* Main Content Viewport */}
-        <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full overflow-x-hidden">
+        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full min-w-0 overflow-x-hidden">
           {renderActiveView()}
         </main>
       </div>

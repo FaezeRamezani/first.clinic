@@ -6,7 +6,7 @@ import type { ClinicScope } from '../../types';
 interface Option {
   id: ClinicScope;
   label: string;
-  subLabel: string;
+
   icon: React.ElementType;
   badgeBg: string;
   badgeText: string;
@@ -19,7 +19,7 @@ export const scopeOptions: Option[] = [
   {
     id: 'unified',
     label: 'کل کلینیک',
-    subLabel: 'هر دو مطب (مشترک)',
+
     icon: Building2,
     badgeBg: 'bg-indigo-50',
     badgeText: 'text-indigo-700',
@@ -30,7 +30,7 @@ export const scopeOptions: Option[] = [
   {
     id: 'aesthetic',
     label: 'داخلی و زیبایی',
-    subLabel: 'مطب ۱ (پوست و زیبایی)',
+
     icon: Sparkles,
     badgeBg: 'bg-purple-50',
     badgeText: 'text-purple-700',
@@ -41,7 +41,7 @@ export const scopeOptions: Option[] = [
   {
     id: 'dental',
     label: 'دندانپزشکی',
-    subLabel: 'مطب ۲ (دندانپزشکی)',
+
     icon: Stethoscope,
     badgeBg: 'bg-teal-50',
     badgeText: 'text-teal-700',
@@ -57,8 +57,8 @@ interface Props {
   labelPrefix?: string;
 }
 
-export const PracticeScopeDropdown: React.FC<Props> = ({ 
-  className = '', 
+export const PracticeScopeDropdown: React.FC<Props> = ({
+  className = '',
   labelPrefix
 }) => {
   const { scope, setScope } = useClinic();
@@ -95,7 +95,7 @@ export const PracticeScopeDropdown: React.FC<Props> = ({
           {labelPrefix && <span className="block text-[10px] text-slate-400 font-normal">{labelPrefix}</span>}
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-slate-800 text-xs">{selectedOption.label}</span>
-            <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">({selectedOption.subLabel})</span>
+
           </div>
         </div>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 mr-1 ${isOpen ? 'rotate-180' : ''}`} />
@@ -121,9 +121,8 @@ export const PracticeScopeDropdown: React.FC<Props> = ({
                   setScope(opt.id);
                   setIsOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-right text-xs transition-colors hover:bg-slate-50 cursor-pointer ${
-                  isSelected ? opt.activeBg : 'text-slate-700'
-                }`}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-right text-xs transition-colors hover:bg-slate-50 cursor-pointer ${isSelected ? opt.activeBg : 'text-slate-700'
+                  }`}
                 role="option"
                 aria-selected={isSelected}
               >
@@ -133,7 +132,7 @@ export const PracticeScopeDropdown: React.FC<Props> = ({
                   </div>
                   <div>
                     <span className="block font-bold text-slate-800">{opt.label}</span>
-                    <span className="block text-[10px] text-slate-400 font-medium">{opt.subLabel}</span>
+
                   </div>
                 </div>
                 {isSelected && <Check className={`w-4 h-4 ${opt.iconColor}`} />}

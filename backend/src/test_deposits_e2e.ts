@@ -1,10 +1,5 @@
 import Fastify from 'fastify';
-import { db, checkDbConnection } from './config/database';
-import { patientsRouter } from './modules/patients/patients.router';
-import { appointmentsRouter } from './modules/appointments/appointments.router';
-import { financeRouter } from './modules/finance/finance.router';
-import { depositsRouter } from './modules/deposits/deposits.router';
-import { servicesRouter } from './modules/services/services.router';
+import { createIsolatedTestDb } from './test_helpers/testDb';
 
 function getData(res: any) {
   const parsed = JSON.parse(res.body);
@@ -13,6 +8,16 @@ function getData(res: any) {
 
 async function runTests() {
   console.log('--- STARTING 12 MANDATORY DEPOSIT TESTS ---');
+
+  // Initialize isolated temporary database
+  const testEnv = await createIsolatedTestDb('deposits_e2e');
+
+  // Dynamically load routers bound to the isolated database
+  const { patientsRouter } = await import('./modules/patients/patients.router');
+  const { appointmentsRouter } = await import('./modules/appointments/appointments.router');
+  const { financeRouter } = await import('./modules/finance/finance.router');
+  const { depositsRouter } = await import('./modules/deposits/deposits.router');
+  const { servicesRouter } = await import('./modules/services/services.router');
 
   const app = Fastify({ logger: false });
   await app.register(patientsRouter, { prefix: '/api/patients' });
@@ -223,14 +228,14 @@ async function runTests() {
     // Check balance after deposit
     const pat4AfterRes = await app.inject({ method: 'GET', url: `/api/patients/${pt4.id}` });
     const pat4After = getData(pat4AfterRes);
-    const balanceAfter = pat4After.balance; // MUST STILL be -2000000!
+    const balanceAfter = pat4After.balance; // Under unified balance, -2,000,000 + 1,000,000 = -1,000,000
 
-    const passed4 = balanceBefore === -2000000 && balanceAfter === -2000000;
+    const passed4 = balanceBefore === -2000000 && balanceAfter === -1000000;
     results.push({
       testNo: 4,
-      title: 'استقلال بیعانه از بدهی قبلی و عدم تغییر تراز عمومی بیمار',
+      title: 'لحاظ شدن مستقیم بیعانه در تراز عمومی بیمار و کاهش بدهی قبلی',
       passed: passed4,
-      details: passed4 ? `تراز قبل: ${balanceBefore}، تراز بعد از پرداخت بیعانه: ${balanceAfter} (بدهی قبلی ۲ میلیون باقی ماند و کسر نشد).` : `خطا: تراز قبل ${balanceBefore} و بعد ${balanceAfter}`
+      details: passed4 ? `تراز قبل: ${balanceBefore}، تراز بعد از پرداخت بیعانه: ${balanceAfter} (بدهی ۲ میلیون به ۱ میلیون کاهش یافت).` : `خطا: تراز قبل ${balanceBefore} و بعد ${balanceAfter}`
     });
 
     // -------------------------------------------------------------
@@ -481,6 +486,7 @@ async function runTests() {
     console.error('Test execution error:', err);
   } finally {
     await app.close();
+    testEnv.cleanup();
   }
 
   console.log('\n================ TEST SUMMARY ================');
