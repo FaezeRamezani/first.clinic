@@ -173,7 +173,7 @@ export const NewDepositModal: React.FC = () => {
     if (!clinicDoctor) return false;
     const isConflict = checkAppointmentConflict(date, slot, clinicDoctor.id);
     if (isConflict) {
-      setApptConflictError(`زمان ${slot} در تاریخ ${date} برای پزشک قبلاً رزرو شده است.`);
+      setApptConflictError('ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
       return true;
     } else {
       setApptConflictError('');
@@ -183,13 +183,6 @@ export const NewDepositModal: React.FC = () => {
 
   const handleServiceSelect = (serviceId: string) => {
     setSelectedServiceId(serviceId);
-    const srv = clinicServices.find(s => s.id === serviceId);
-    if (srv && srv.price > 0) {
-      // Suggest half tariff or full tariff as initial proposal if not set
-      if (!depositAmount || depositAmount === 500000) {
-        setDepositAmount(Math.round(srv.price * 0.3)); // 30% suggested deposit
-      }
-    }
   };
 
   // Step Validation
@@ -528,11 +521,13 @@ export const NewDepositModal: React.FC = () => {
                 <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                   <div>
                     <p className="font-bold text-slate-800">{selectedService.name}</p>
-                    <p className="text-[11px] text-slate-500 font-medium">تعرفه مصوب کلینیک</p>
+                    <p className="text-[11px] text-slate-500 font-medium">خدمت انتخابی</p>
                   </div>
-                  <div className="text-left font-black text-indigo-600 text-xs">
-                    {formatCurrency(selectedService.price)}
-                  </div>
+                  {selectedService.duration && (
+                    <div className="text-left font-medium text-slate-600 text-xs">
+                      {selectedService.duration} دقیقه
+                    </div>
+                  )}
                 </div>
               )}
 

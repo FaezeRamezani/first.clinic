@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { getTodayJalaliDate } from '../../utils/persianUtils';
+import { getTodayJalaliDate, toFarsiDigits } from '../../utils/persianUtils';
 import { 
   validatePersianName, 
   validateIranianMobile, 
   validateIranianNationalId, 
-  normalizeDigits 
+  normalizeDigits,
+  checkDuplicatePatientInPractice,
+  type DuplicatePatientCheckResult
 } from '../../utils/validation';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, AlertTriangle } from 'lucide-react';
 
 export const NewPatientModal: React.FC = () => {
-  const { isNewPatientOpen, setIsNewPatientOpen, addPatient, patients, ensurePatientMembership } = useClinic();
+  const { isNewPatientOpen, setIsNewPatientOpen, addPatient, patients } = useClinic();
 
   const [name, setName] = useState<string>('');
   const [mobile, setMobile] = useState<string>('');
@@ -24,6 +26,7 @@ export const NewPatientModal: React.FC = () => {
   const [emergencyPhone] = useState<string>('');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicatePatientCheckResult | null>(null);
 
   React.useEffect(() => {
     if (isNewPatientOpen) {
@@ -35,10 +38,37 @@ export const NewPatientModal: React.FC = () => {
       setAllergiesStr('');
       setMedicalNotes('');
       setErrorMessage(null);
+      setDuplicateWarning(null);
     }
   }, [isNewPatientOpen]);
 
   if (!isNewPatientOpen) return null;
+
+  const executePatientCreation = (cleanName: string, cleanMobile: string, cleanNationalId: string) => {
+    addPatient({
+      name: cleanName,
+      mobile: cleanMobile,
+      nationalId: cleanNationalId,
+      gender,
+      birthDate,
+      primaryPractice,
+      memberships: [{ practice: primaryPractice, physicalFileNumber: String(100 + patients.length + 1), joinedAt: getTodayJalaliDate() }],
+      allergies: allergiesStr ? allergiesStr.split(',').map(s => s.trim()) : [],
+      medicalNotes,
+      emergencyContact: {
+        name: emergencyName || '-',
+        phone: emergencyPhone || '-',
+        relation: 'بستگان'
+      }
+    });
+
+    setIsNewPatientOpen(false);
+    setName('');
+    setMobile('');
+    setNationalId('');
+    setErrorMessage(null);
+    setDuplicateWarning(null);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,40 +99,14 @@ export const NewPatientModal: React.FC = () => {
     const cleanMobile = mobileVal.normalized;
     const cleanNationalId = nidVal.normalized;
 
-    // Check duplicate warning by mobile / national ID
-    const duplicate = patients.find(p => p.mobile === cleanMobile || (cleanNationalId && p.nationalId === cleanNationalId));
-    if (duplicate) {
-      alert(`اطلاعات این شخص قبلاً با نام «${duplicate.name}» در سیستم ثبت شده است. عضویت ${primaryPractice === 'aesthetic' ? 'مطب زیبایی' : 'مطب دندانپزشکی'} برای همین بیمار فعال گردید.`);
-      ensurePatientMembership(duplicate.id, primaryPractice);
-      setIsNewPatientOpen(false);
-      setName('');
-      setMobile('');
-      setNationalId('');
+    // Check for duplicate name or mobile in the same practice
+    const dupCheck = checkDuplicatePatientInPractice(cleanName, cleanMobile, primaryPractice, patients);
+    if (dupCheck.hasDuplicate) {
+      setDuplicateWarning(dupCheck);
       return;
     }
 
-    addPatient({
-      name: cleanName,
-      mobile: cleanMobile,
-      nationalId: cleanNationalId,
-      gender,
-      birthDate,
-      primaryPractice,
-      memberships: [{ practice: primaryPractice, physicalFileNumber: String(100 + patients.length + 1), joinedAt: getTodayJalaliDate() }],
-      allergies: allergiesStr ? allergiesStr.split(',').map(s => s.trim()) : [],
-      medicalNotes,
-      emergencyContact: {
-        name: emergencyName || '-',
-        phone: emergencyPhone || '-',
-        relation: 'بستگان'
-      }
-    });
-
-    setIsNewPatientOpen(false);
-    setName('');
-    setMobile('');
-    setNationalId('');
-    setErrorMessage(null);
+    executePatientCreation(cleanName, cleanMobile, cleanNationalId);
   };
 
   return (
@@ -221,21 +225,79 @@ export const NewPatientModal: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setIsNewPatientOpen(false)}
-              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
-            >
-              انصراف
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs"
-            >
-              تشکیل پرونده
-            </button>
-          </div>
+          {/* Duplicate Patient Warning Banner */}
+          {duplicateWarning && (
+            <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-3 animate-in fade-in duration-150">
+              <div className="flex items-start gap-2.5 text-amber-900">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-extrabold text-amber-950">
+                    {duplicateWarning.duplicateType === 'both' && 'بیماری با نام و شماره تلفن واردشده در بیماران همین مطب وجود دارد. آیا ثبت بیمار جدید با این مشخصات مورد تأیید است؟'}
+                    {duplicateWarning.duplicateType === 'name' && 'بیماری با نام واردشده در بیماران همین مطب وجود دارد. آیا ثبت بیمار جدید با این مشخصات مورد تأیید است؟'}
+                    {duplicateWarning.duplicateType === 'mobile' && 'بیماری با شماره تلفن واردشده در بیماران همین مطب وجود دارد. آیا ثبت بیمار جدید با این مشخصات مورد تأیید است؟'}
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    مشخصه تکراری: <span className="font-bold underline">{duplicateWarning.duplicateType === 'both' ? 'نام و شماره تلفن' : duplicateWarning.duplicateType === 'name' ? 'نام بیمار' : 'شماره تلفن'}</span> در مطب {primaryPractice === 'aesthetic' ? 'زیبایی' : 'دندانپزشکی'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Matched patients list */}
+              <div className="bg-white/90 rounded-xl p-2.5 border border-amber-200 space-y-1.5 max-h-32 overflow-y-auto">
+                <span className="text-[10px] font-bold text-slate-500 block">بیمار(ان) منطبق موجود در این مطب:</span>
+                {duplicateWarning.matchedPatients.map((mp) => (
+                  <div key={mp.id} className="flex items-center justify-between text-[11px] py-1 border-b border-amber-100 last:border-0">
+                    <span className="font-bold text-slate-800">{mp.name}</span>
+                    <div className="flex items-center gap-2 text-slate-600 font-mono text-[10px]">
+                      {mp.physicalFileNumber && <span>پرونده: {toFarsiDigits(mp.physicalFileNumber)}</span>}
+                      <span>تلفن: {toFarsiDigits(mp.mobile)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Two clear choices */}
+              <div className="flex items-center justify-end gap-2 pt-1 border-t border-amber-200">
+                <button
+                  type="button"
+                  onClick={() => setDuplicateWarning(null)}
+                  className="px-3.5 py-1.5 bg-white border border-amber-300 hover:bg-amber-100/70 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  بازگشت و اصلاح اطلاعات
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nameVal = validatePersianName(name);
+                    const mobVal = validateIranianMobile(mobile);
+                    const nidVal = validateIranianNationalId(nationalId, true);
+                    executePatientCreation(nameVal.normalized, mobVal.normalized, nidVal.normalized);
+                  }}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold shadow-xs transition-colors cursor-pointer"
+                >
+                  تأیید و ثبت بیمار جدید
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!duplicateWarning && (
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsNewPatientOpen(false)}
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+              >
+                تشکیل پرونده
+              </button>
+            </div>
+          )}
 
         </form>
 

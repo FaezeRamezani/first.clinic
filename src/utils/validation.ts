@@ -251,3 +251,128 @@ export function validateNumericRange(
 
   return { isValid: true, value: num };
 }
+
+import type { Patient } from '../types';
+
+/**
+ * Normalizes text for exact Persian comparison (removes zero-width non-joiner, standardizes chars, trims & collapses whitespace)
+ */
+export function normalizeForExactComparison(str: string | null | undefined): string {
+  if (!str) return '';
+  return str
+    .toString()
+    .replace(/[۰-۹]/g, (w) => (w.charCodeAt(0) - 1776).toString())
+    .replace(/[٠-٩]/g, (w) => (w.charCodeAt(0) - 1632).toString())
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .replace(/[آأإ]/g, 'ا')
+    .replace(/\u200c/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Normalizes mobile number for reliable comparison (digits only, handles 09... / +98... / 98...)
+ */
+export function normalizeMobileForComparison(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const digits = phone
+    .toString()
+    .replace(/[۰-۹]/g, (w) => (w.charCodeAt(0) - 1776).toString())
+    .replace(/[٠-٩]/g, (w) => (w.charCodeAt(0) - 1632).toString())
+    .replace(/\D/g, '');
+  if (!digits) return '';
+  let clean = digits;
+  if (clean.startsWith('0098')) clean = clean.slice(4);
+  else if (clean.startsWith('98') && clean.length === 12) clean = clean.slice(2);
+  if (!clean.startsWith('0') && clean.length === 10) clean = '0' + clean;
+  return clean;
+}
+
+export interface DuplicatePatientCheckResult {
+  hasDuplicate: boolean;
+  duplicateType?: 'both' | 'name' | 'mobile';
+  matchedPatients: {
+    id: string;
+    name: string;
+    mobile: string;
+    physicalFileNumber?: string;
+    practice: string;
+  }[];
+}
+
+/**
+ * Checks for existing patients with the same exact name or mobile in the target practice
+ */
+export function checkDuplicatePatientInPractice(
+  name: string,
+  mobile: string,
+  targetPractice: 'aesthetic' | 'dental',
+  patients: Patient[]
+): DuplicatePatientCheckResult {
+  const normName = normalizeForExactComparison(name);
+  const normMobile = normalizeMobileForComparison(mobile);
+
+  if (!normName && !normMobile) {
+    return { hasDuplicate: false, matchedPatients: [] };
+  }
+
+  // Filter patients belonging to the same practice
+  const practicePatients = patients.filter(p => {
+    const inMemberships = p.memberships?.some(m => m.practice === targetPractice);
+    const inPrimary = p.primaryPractice === targetPractice;
+    return inMemberships || inPrimary;
+  });
+
+  const matchedSet = new Map<string, { id: string; name: string; mobile: string; physicalFileNumber?: string; practice: string }>();
+  let hasNameMatch = false;
+  let hasMobileMatch = false;
+
+  for (const p of practicePatients) {
+    const pNormName = normalizeForExactComparison(p.name);
+    const pNormMobile = normalizeMobileForComparison(p.mobile);
+
+    // Also check practice-specific membership phone if present
+    const mem = p.memberships?.find(m => m.practice === targetPractice);
+    const memPhone = mem?.phone ? normalizeMobileForComparison(mem.phone) : '';
+
+    const nameMatch = !!normName && pNormName === normName;
+    const mobileMatch = !!normMobile && (pNormMobile === normMobile || (!!memPhone && memPhone === normMobile));
+
+    if (nameMatch) hasNameMatch = true;
+    if (mobileMatch) hasMobileMatch = true;
+
+    if (nameMatch || mobileMatch) {
+      if (!matchedSet.has(p.id)) {
+        matchedSet.set(p.id, {
+          id: p.id,
+          name: p.name,
+          mobile: p.mobile,
+          physicalFileNumber: mem?.physicalFileNumber || p.fileNumber,
+          practice: targetPractice
+        });
+      }
+    }
+  }
+
+  if (matchedSet.size === 0) {
+    return { hasDuplicate: false, matchedPatients: [] };
+  }
+
+  let duplicateType: 'both' | 'name' | 'mobile' = 'name';
+  if (hasNameMatch && hasMobileMatch) {
+    duplicateType = 'both';
+  } else if (hasMobileMatch) {
+    duplicateType = 'mobile';
+  } else {
+    duplicateType = 'name';
+  }
+
+  return {
+    hasDuplicate: true,
+    duplicateType,
+    matchedPatients: Array.from(matchedSet.values())
+  };
+}

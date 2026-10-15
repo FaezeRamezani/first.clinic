@@ -351,7 +351,6 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                       {detailScope === 'unified' && <th className="py-2.5 px-3">مطب</th>}
                       <th className="py-2.5 px-3">خدمت ارائه شده</th>
                       <th className="py-2.5 px-3">مبلغ کل</th>
-                      <th className="py-2.5 px-3">تخفیف</th>
                       <th className="py-2.5 px-3">مبلغ دریافتی</th>
                       <th className="py-2.5 px-3 text-rose-600">بدهی باقیمانده</th>
                       <th className="py-2.5 px-3">حساب</th>
@@ -361,7 +360,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                   <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
                     {patientTransactions.length === 0 ? (
                       <tr>
-                        <td colSpan={detailScope === 'unified' ? 9 : 8} className="py-8 text-center text-slate-400 font-semibold">
+                        <td colSpan={detailScope === 'unified' ? 8 : 7} className="py-8 text-center text-slate-400 font-semibold">
                           هیچ تراکنش مالی در این محدوده انتخاب‌شده یافت نشد.
                         </td>
                       </tr>
@@ -380,7 +379,6 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                           )}
                           <td className="py-3 px-3 font-bold text-slate-900">{t.serviceName}</td>
                           <td className="py-3 px-3">{formatCurrency(t.totalCost)}</td>
-                          <td className="py-3 px-3 text-slate-500">{formatCurrency(t.discount)}</td>
                           <td className="py-3 px-3 font-bold text-emerald-600">{formatCurrency(t.paidAmount)}</td>
                           <td className="py-3 px-3 font-bold text-rose-600">
                             {t.remainingDebt > 0 ? formatCurrency(t.remainingDebt) : '۰'}

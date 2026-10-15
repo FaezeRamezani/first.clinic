@@ -20,7 +20,7 @@ import type {
   GlobalShiftsConfig,
   Deposit
 } from '../types';
-import { getTodayJalaliDate, getJalaliDateOffset, toEnglishDigits, toFarsiDigits } from '../utils/persianUtils';
+import { getTodayJalaliDate, toEnglishDigits, toFarsiDigits } from '../utils/persianUtils';
 import {
   settingsApi,
   doctorsApi,
@@ -141,6 +141,36 @@ export interface NewAppointmentPrefillData {
   previousAppointmentId?: string;
 }
 
+export interface CheckoutServiceInput {
+  serviceId?: string;
+  serviceName: string;
+  cost: number;
+  defaultPaymentTermDays?: number;
+}
+
+export interface CheckoutRecordData {
+  patientId: string;
+  patientName: string;
+  fileNumber: string;
+  appointmentId?: string;
+  practice: 'aesthetic' | 'dental';
+  date: string;
+  timestamp?: string;
+  services?: CheckoutServiceInput[];
+  serviceName?: string;
+  serviceId?: string;
+  totalCost: number;
+  discount?: number;
+  netCost?: number;
+  paidAmount: number;
+  remainingDebt: number;
+  paymentMethod: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer';
+  posAccount: string;
+  debtDueDate?: string;
+  notes?: string;
+  depositId?: string;
+}
+
 interface ClinicContextType {
   scope: ClinicScope;
   setScope: (scope: ClinicScope) => void;
@@ -217,10 +247,11 @@ interface ClinicContextType {
   cancelAppointment: (id: string, type: 'rescheduled' | 'no_replacement', reason?: string) => void;
   updateAppointmentStatus: (id: string, status: AppointmentStatus) => void;
   updateAppointmentPresenceStatus: (id: string, presenceStatus: PresenceStatus) => void;
-  checkAppointmentConflict: (date: string, timeSlot: string, doctorId: string, excludeApptId?: string) => boolean;
+  checkAppointmentConflict: (date: string, timeSlot: string, doctorIdOrPractice: string, excludeApptId?: string) => boolean;
+  getSlotActiveCount: (date: string, timeSlot: string, doctorIdOrPractice: string, excludeApptId?: string) => number;
   approveOnlineRequest: (id: string, confirmedDate?: string, timeSlot?: string, doctorId?: string, customMessage?: string) => boolean | Promise<boolean>;
   rejectOnlineRequest: (id: string, reason: string) => void | Promise<void>;
-  recordCheckout: (trxData: Omit<FinancialTransaction, 'id'>) => void;
+  recordCheckout: (trxData: CheckoutRecordData) => Promise<void>;
   collectPayment: (patientId: string, amount: number, posAccount: string, practice: 'aesthetic' | 'dental', transactionId?: string, debtDueDate?: string, notes?: string, customRecordDate?: string) => boolean | Promise<boolean>;
   updateFollowUp: (id: string, status: FollowUpStatus, resultNote: string) => void | Promise<void>;
   createTask: (taskData: Omit<FollowUpTask, 'id'> & { title?: string }) => void | Promise<void>;
@@ -424,16 +455,30 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const checkAppointmentConflict = (date: string, timeSlot: string, doctorId: string, excludeApptId?: string): boolean => {
+  const getSlotActiveCount = (date: string, timeSlot: string, doctorIdOrPractice: string, excludeApptId?: string): number => {
     const normDate = toEnglishDigits(date).trim().replace(/\//g, '-');
     const normSlot = toEnglishDigits(timeSlot).trim();
 
-    return appointments.some(apt => {
-      if (apt.id === excludeApptId || apt.status === 'canceled' || apt.status === 'rescheduled') return false;
+    let targetPractice: 'aesthetic' | 'dental' | undefined;
+    if (doctorIdOrPractice === 'aesthetic' || doctorIdOrPractice === 'dental') {
+      targetPractice = doctorIdOrPractice;
+    } else {
+      const doc = doctors.find(d => d.id === doctorIdOrPractice);
+      targetPractice = doc?.practice;
+    }
+
+    return appointments.filter(apt => {
+      if (excludeApptId && apt.id === excludeApptId) return false;
+      if (apt.status === 'canceled' || apt.status === 'rescheduled') return false;
+      if (targetPractice && apt.practice !== targetPractice) return false;
       const aptDate = toEnglishDigits(apt.date).trim().replace(/\//g, '-');
       const aptSlot = toEnglishDigits(apt.timeSlot).trim();
-      return apt.doctorId === doctorId && aptDate === normDate && aptSlot === normSlot;
-    });
+      return aptDate === normDate && aptSlot === normSlot;
+    }).length;
+  };
+
+  const checkAppointmentConflict = (date: string, timeSlot: string, doctorIdOrPractice: string, excludeApptId?: string): boolean => {
+    return getSlotActiveCount(date, timeSlot, doctorIdOrPractice, excludeApptId) >= 3;
   };
 
   const ensurePatientMembership = async (patientId: string, practice: 'aesthetic' | 'dental', customFileNumber?: string) => {
@@ -567,7 +612,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const recordCheckout = async (trxData: Omit<FinancialTransaction, 'id'>) => {
+  const recordCheckout = async (trxData: CheckoutRecordData) => {
     try {
       if (trxData.appointmentId && transactions.some(t => t.appointmentId === trxData.appointmentId && t.trxType === 'service')) {
         alert('برای این نوبت قبلاً تسویه مالی ثبت شده است.');
@@ -602,31 +647,29 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         finalPatientId = existingPatient.id;
       }
 
-      let effectiveDueDate = trxData.debtDueDate;
-      if (trxData.remainingDebt > 0 && (!effectiveDueDate || !effectiveDueDate.trim())) {
-        const matchedService = services.find(s => s.name === trxData.serviceName || s.id === (trxData as any).serviceId);
-        if (matchedService?.defaultPaymentTermDays && matchedService.defaultPaymentTermDays > 0) {
-          const serviceDateToUse = trxData.serviceDate || trxData.date || getTodayJalaliDate();
-          effectiveDueDate = getJalaliDateOffset(serviceDateToUse, matchedService.defaultPaymentTermDays);
-        }
-      }
+      // Prepare services list
+      const servicesToRecord: CheckoutServiceInput[] = (trxData.services && trxData.services.length > 0)
+        ? trxData.services
+        : [{
+            serviceId: trxData.serviceId,
+            serviceName: trxData.serviceName || 'خدمت درمانی',
+            cost: trxData.totalCost || 0
+          }];
 
-      await financeApi.createObligation({
+      await financeApi.checkout({
         patientId: finalPatientId,
         appointmentId: trxData.appointmentId,
-        serviceId: (trxData as any).serviceId,
         practice: trxData.practice || 'aesthetic',
-        serviceDate: trxData.serviceDate || trxData.date || getTodayJalaliDate(),
-        recordDate: trxData.date || getTodayJalaliDate(),
-        serviceName: trxData.serviceName,
-        totalCost: trxData.totalCost || 0,
-        discount: trxData.discount || 0,
-        dueDate: effectiveDueDate,
-        notes: trxData.notes,
+        services: servicesToRecord,
         paidAmount: trxData.paidAmount || 0,
         paymentMethod: trxData.paymentMethod,
         posAccount: trxData.posAccount,
-        depositId: trxData.depositId
+        debtDueDate: trxData.debtDueDate,
+        notes: trxData.notes,
+        depositId: trxData.depositId,
+        timestamp: trxData.timestamp,
+        serviceDate: trxData.date || getTodayJalaliDate(),
+        recordDate: trxData.date || getTodayJalaliDate()
       });
 
       const [freshTrxs, freshPats, freshApts, freshDeps] = await Promise.all([
@@ -1116,6 +1159,7 @@ export const ClinicProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         updateAppointmentStatus,
         updateAppointmentPresenceStatus,
         checkAppointmentConflict,
+        getSlotActiveCount,
         approveOnlineRequest,
         rejectOnlineRequest,
         recordCheckout,

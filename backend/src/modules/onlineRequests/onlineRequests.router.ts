@@ -172,18 +172,18 @@ export async function onlineRequestsRouter(fastify: FastifyInstance) {
 
       try {
         sqlite.transaction(() => {
-          // 1. Conflict Check: Active appointments for same doctor, date, and slot
+          // 1. Capacity Check: Maximum 3 active appointments for target practice, date, and slot
           const existingApts = db.select().from(appointments).all();
-          const hasConflict = existingApts.some(a => {
+          const activeInSlot = existingApts.filter(a => {
             if (a.status === 'canceled' || a.status === 'rescheduled') return false;
-            if (a.doctorId !== targetDoctorId) return false;
+            if (a.practice !== targetPractice) return false;
             const aDate = toStandardJalaliDbDate(a.date);
             const aSlot = toEnglishDigits(a.timeSlot).trim();
             return aDate === targetDate && aSlot === targetSlot;
           });
 
-          if (hasConflict) {
-            throw new Error('CONFLICT:این زمان برای پزشک انتخاب‌شده قبلاً رزرو شده است.');
+          if (activeInSlot.length >= 3) {
+            throw new Error('CONFLICT:ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
           }
 
           // 2. Find or Create Patient

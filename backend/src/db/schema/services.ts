@@ -5,7 +5,7 @@ export const services = sqliteTable('services', {
   name: text('name').notNull(),
   code: text('code').notNull().unique(),
   practice: text('practice').notNull(), // 'aesthetic' | 'dental'
-  price: integer('price').notNull(), // In Tomans
+  price: integer('price').notNull().default(0), // In Tomans (deprecated, default 0)
   duration: integer('duration').notNull(), // In minutes
   description: text('description'),
   defaultPaymentTermDays: integer('default_payment_term_days').notNull().default(10),

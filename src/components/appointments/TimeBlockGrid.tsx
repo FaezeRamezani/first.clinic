@@ -31,9 +31,7 @@ const generateSessionSlots = (startStr: string, endStr: string, intervalMinutes:
 import { 
   Sparkles, 
   Stethoscope, 
-  CheckCircle2,
-  XCircle,
-  ArrowRightLeft
+  CheckCircle2
 } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import type { Appointment } from '../../types';
@@ -52,7 +50,6 @@ export const TimeBlockGrid: React.FC = () => {
   const todayStr = getTodayJalaliDate();
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [doctorIntervals, setDoctorIntervals] = useState<Record<string, number>>({});
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>('all');
 
   const getDoctorInterval = (doctorId: string) => doctorIntervals[doctorId] || 30;
 
@@ -62,18 +59,41 @@ export const TimeBlockGrid: React.FC = () => {
 
   const dateRelation = getDateRelationToToday(selectedDate);
 
+  // Scope status
+  const isScopeEnforced = scope !== 'unified';
+
   // Doctors list based on Global Scope
   const scopeDoctors = doctors.filter(doc => scope === 'unified' || doc.practice === scope);
 
-  // Reset selected doctor if no longer available in current practice scope
-  useEffect(() => {
-    if (selectedDoctorId !== 'all' && !scopeDoctors.some(d => d.id === selectedDoctorId)) {
-      setSelectedDoctorId('all');
+  // Initialize selectedDoctorId to the first available doctor (never 'all')
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>(() => {
+    if (scope !== 'unified') {
+      const match = doctors.find(d => d.practice === scope);
+      return match ? match.id : (doctors[0]?.id || '');
     }
-  }, [scope, scopeDoctors, selectedDoctorId]);
+    return doctors[0]?.id || '';
+  });
 
-  // Filtered doctors to display
-  const displayedDoctors = scopeDoctors.filter(doc => selectedDoctorId === 'all' || doc.id === selectedDoctorId);
+  // Keep selectedDoctorId in sync when scope or scopeDoctors change
+  useEffect(() => {
+    if (isScopeEnforced) {
+      const match = doctors.find(d => d.practice === scope);
+      if (match && selectedDoctorId !== match.id) {
+        setSelectedDoctorId(match.id);
+      }
+    } else {
+      // If current selection is invalid or 'all', fallback to first available
+      if (!scopeDoctors.some(d => d.id === selectedDoctorId)) {
+        if (scopeDoctors.length > 0) {
+          setSelectedDoctorId(scopeDoctors[0].id);
+        }
+      }
+    }
+  }, [scope, isScopeEnforced, scopeDoctors, selectedDoctorId, doctors]);
+
+  // Filtered doctor to display: strictly exactly 1 doctor at any time
+  const currentDoctor = scopeDoctors.find(doc => doc.id === selectedDoctorId) || scopeDoctors[0];
+  const displayedDoctors = currentDoctor ? [currentDoctor] : [];
 
   // Filter ALL appointments matching selected date
   const dateAppointments = appointments.filter(a => {
@@ -82,15 +102,20 @@ export const TimeBlockGrid: React.FC = () => {
     return normApptDate === normSelDate;
   });
 
-  // Get appointments for a specific doctor and slot block
-  const getAppointmentsForDoctorAndSlot = (doctorId: string, slot: string, intervalMinutes: number) => {
+  // Filter appointments specifically for the selected clinic
+  const selectedClinicAppointments = dateAppointments.filter(a => {
+    return currentDoctor && a.practice === currentDoctor.practice && a.status !== 'canceled' && a.status !== 'rescheduled';
+  });
+
+  // Get appointments for a specific practice and slot block
+  const getAppointmentsForPracticeAndSlot = (practice: 'aesthetic' | 'dental', slot: string, intervalMinutes: number) => {
     const slotHour = parseInt(toEnglishDigits(slot).split(':')[0], 10);
     const slotMin = parseInt(toEnglishDigits(slot).split(':')[1], 10);
     const slotTotalMins = slotHour * 60 + slotMin;
     const slotEndMins = slotTotalMins + intervalMinutes;
 
     return dateAppointments.filter(a => {
-      if (a.doctorId !== doctorId) return false;
+      if (a.practice !== practice) return false;
       // Exclude canceled and rescheduled appointments so slots are freed for re-booking
       if (a.status === 'canceled' || a.status === 'rescheduled') return false;
       const apptTime = toEnglishDigits(a.timeSlot).trim();
@@ -189,24 +214,31 @@ export const TimeBlockGrid: React.FC = () => {
 
           </div>
 
-          {/* Right Controls: Doctor Selection Dropdown */}
+          {/* Right Controls: Clinic Selection Dropdown */}
           <div className="flex flex-wrap items-center gap-2">
             
-            {/* Doctor Selection Dropdown */}
+            {/* Clinic Selection Dropdown */}
             <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 text-xs shrink-0">
-              <span className="text-slate-600 font-bold">انتخاب پزشک / مطب:</span>
+              <span className="text-slate-600 font-bold">انتخاب مطب:</span>
               <select
                 value={selectedDoctorId}
+                disabled={isScopeEnforced}
                 onChange={(e) => setSelectedDoctorId(e.target.value)}
-                className="bg-white border border-slate-300 text-slate-800 font-bold text-xs rounded-lg px-2.5 py-1 outline-none cursor-pointer focus:border-indigo-500"
+                className={`bg-white border border-slate-300 text-slate-800 font-bold text-xs rounded-lg px-2.5 py-1 outline-none ${
+                  isScopeEnforced ? 'cursor-not-allowed opacity-80 bg-slate-100' : 'cursor-pointer focus:border-indigo-500'
+                }`}
               >
-                <option value="all">همه مطب‌ها (همزمان)</option>
                 {scopeDoctors.map((doc) => (
                   <option key={doc.id} value={doc.id}>
-                    {doc.name} ({doc.practice === 'aesthetic' ? 'مطب ۱' : 'مطب ۲'})
+                    {doc.name} ({doc.practice === 'aesthetic' ? 'مطب ۱ - زیبایی' : 'مطب ۲ - دندانپزشکی'})
                   </option>
                 ))}
               </select>
+              {isScopeEnforced && (
+                <span className="px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-bold rounded-lg whitespace-nowrap">
+                  مطب تعیین‌شده توسط محدوده سراسری
+                </span>
+              )}
             </div>
 
           </div>
@@ -217,17 +249,17 @@ export const TimeBlockGrid: React.FC = () => {
         <div className="text-xs text-slate-500 font-medium pt-1 border-t border-slate-100 flex items-center justify-between">
           <span>{formatJalaliDateLong(selectedDate)}</span>
           <span className="text-slate-400">
-            تعداد کل نوبت‌های این روز: <strong className="text-indigo-600 font-bold">{toFarsiDigits(dateAppointments.filter(a => a.status !== 'canceled' && a.status !== 'rescheduled').length)}</strong> نوبت
+            تعداد کل نوبت‌های این روز ({currentDoctor ? (currentDoctor.practice === 'aesthetic' ? 'مطب ۱' : 'مطب ۲') : 'مطب'}): <strong className="text-indigo-600 font-bold">{toFarsiDigits(selectedClinicAppointments.length)}</strong> نوبت
           </span>
         </div>
 
       </div>
 
-      {/* Main Layout: Side-by-Side Practice Panels Container */}
-      <div className={`grid gap-6 ${displayedDoctors.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+      {/* Main Layout: Single Practice Panel Container (strictly 1 clinic displayed) */}
+      <div className="grid gap-6 grid-cols-1">
         {displayedDoctors.map((doc) => {
           const isAesthetic = doc.practice === 'aesthetic';
-          const docAppointments = dateAppointments.filter(a => a.doctorId === doc.id && a.status !== 'canceled' && a.status !== 'rescheduled');
+          const docAppointments = selectedClinicAppointments;
           const docAppointmentsCount = docAppointments.length;
           const docInterval = getDoctorInterval(doc.id);
           
@@ -307,110 +339,131 @@ export const TimeBlockGrid: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {docTimeSlots.map((slot) => {
                     const isFarsiSlot = toFarsiDigits(slot);
-                    const docSlotAppts = getAppointmentsForDoctorAndSlot(doc.id, slot, docInterval);
+                    const docSlotAppts = getAppointmentsForPracticeAndSlot(doc.practice, slot, docInterval);
+                    const activeCount = docSlotAppts.length;
+                    const remainingCapacity = Math.max(0, 3 - activeCount);
+                    const isFull = activeCount >= 3;
 
-                    // Case 1: Slot has one or more booked appointments
-                    if (docSlotAppts.length > 0) {
-                      return docSlotAppts.map((apt) => {
-                        const isCompleted = apt.status === 'completed';
-                        const isRescheduled = apt.status === 'rescheduled';
-                        const isCanceled = apt.status === 'canceled';
-                        const isInactive = isCompleted || isRescheduled || isCanceled;
-
-                        const cardBgClass = isRescheduled
-                          ? 'bg-amber-50/90 border-amber-200 text-amber-950'
-                          : isCanceled
-                            ? 'bg-rose-50/90 border-rose-200 text-rose-950'
-                            : isCompleted
-                              ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
-                              : isAesthetic
-                                ? 'bg-indigo-50/80 hover:bg-indigo-100/70 border-indigo-200 text-indigo-950 shadow-2xs'
-                                : 'bg-teal-50/80 hover:bg-teal-100/70 border-teal-200 text-teal-950 shadow-2xs';
-
-                        return (
-                          <div 
-                            key={apt.id}
-                            className={`p-3 rounded-2xl border transition-all flex flex-col justify-between h-[92px] shadow-2xs ${cardBgClass}`}
-                          >
-                            <div className="flex items-start justify-between gap-1 w-full">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1">
-                                  <p className="font-extrabold text-xs text-slate-900 truncate max-w-[85px]" title={apt.patientName}>
-                                    {apt.patientName}
-                                  </p>
-                                  <span className="text-[8px] px-1 py-0.2 rounded font-bold bg-white/90 border border-slate-200 text-slate-600 shrink-0">
-                                    {(() => {
-                                      const p = patients.find(pat => pat.id === apt.patientId);
-                                      return p ? getPatientFileNumberDisplay(p, apt.practice) : toFarsiDigits(apt.fileNumber);
-                                    })()}
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-slate-600 font-medium truncate mt-0.5" title={apt.serviceName || 'ویزیت عمومی'}>
-                                  {apt.serviceName || 'ویزیت عمومی'}
-                                </p>
-                              </div>
-
-                              <span className="text-xs font-black text-slate-800 dir-ltr shrink-0">{isFarsiSlot}</span>
-                            </div>
-
-                            <div className="flex items-center justify-between w-full pt-1.5 border-t border-slate-200/60">
-                              {/* Status Badge */}
-                              {isCompleted ? (
-                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded text-[9px] flex items-center gap-0.5">
-                                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> تکمیل
-                                </span>
-                              ) : isCanceled ? (
-                                <span className="px-1.5 py-0.5 bg-rose-100 text-rose-800 font-bold rounded text-[9px] flex items-center gap-0.5">
-                                  <XCircle className="w-2.5 h-2.5 text-rose-600" /> لغو شد
-                                </span>
-                              ) : isRescheduled ? (
-                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 font-bold rounded text-[9px] flex items-center gap-0.5">
-                                  <ArrowRightLeft className="w-2.5 h-2.5 text-amber-600" /> منتقل شد
-                                </span>
-                              ) : (
-                                <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 font-bold rounded text-[9px]">
-                                  رزرو شده
-                                </span>
-                              )}
-
-                              {/* Only Cancel / Reschedule Action */}
-                              {!isInactive && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCancelGuard(apt)}
-                                  className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-bold transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  لغو / جابجایی
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      });
-                    }
-
-                    // Case 2: Empty available booking slot
                     return (
-                      <button
+                      <div 
                         key={slot}
-                        type="button"
-                        onClick={() => openNewAppointment({ doctorId: doc.id, date: selectedDate, timeSlot: isFarsiSlot, isSlotBooking: true })}
-                        className="p-3 bg-white border border-dashed border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/20 rounded-2xl text-right hover:shadow-xs transition-all flex flex-col justify-between h-[92px] group active:scale-95 cursor-pointer"
+                        className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between shadow-2xs ${
+                          isFull
+                            ? 'bg-slate-50/90 border-slate-200'
+                            : activeCount > 0
+                              ? isAesthetic 
+                                ? 'bg-indigo-50/30 border-indigo-200' 
+                                : 'bg-teal-50/30 border-teal-200'
+                              : 'bg-white border-dashed border-slate-200 hover:border-emerald-500'
+                        }`}
                       >
-                        <div className="flex items-center justify-between w-full">
+                        {/* Header: Time & Capacity Badge */}
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                           <span className="text-xs font-black text-slate-800 dir-ltr">{isFarsiSlot}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span className="text-[9px] font-black text-emerald-600">خالی</span>
+                          <div>
+                            {isFull ? (
+                              <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-extrabold rounded-lg text-[10px]">
+                                تکمیل ({toFarsiDigits(activeCount)}/۳)
+                              </span>
+                            ) : activeCount > 0 ? (
+                              <span className={`px-2 py-0.5 font-bold rounded-lg text-[10px] ${
+                                isAesthetic ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
+                              }`}>
+                                {toFarsiDigits(activeCount)} از ۳ نوبت ({toFarsiDigits(remainingCapacity)} خالی)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-lg text-[10px] flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                خالی (۳ ظرفیت)
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between w-full pt-1.5 border-t border-slate-100">
-                          <span className="text-[9px] text-slate-400 font-bold group-hover:text-emerald-600 transition-colors">
-                            ثبت نوبت ←
-                          </span>
+                        {/* List of active booked appointments */}
+                        {activeCount > 0 && (
+                          <div className="space-y-2 py-2 flex-1">
+                            {docSlotAppts.map((apt, index) => {
+                              const isCompleted = apt.status === 'completed';
+                              const isRescheduled = apt.status === 'rescheduled';
+                              const isCanceled = apt.status === 'canceled';
+                              const isInactive = isCompleted || isRescheduled || isCanceled;
+
+                              return (
+                                <div 
+                                  key={apt.id}
+                                  className="p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between gap-2"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px] font-bold text-slate-400">#{toFarsiDigits(index + 1)}</span>
+                                      <p className="font-extrabold text-xs text-slate-900 truncate" title={apt.patientName}>
+                                        {apt.patientName}
+                                      </p>
+                                      <span className="text-[8px] px-1 py-0.2 rounded font-bold bg-slate-50 border border-slate-200 text-slate-600 shrink-0">
+                                        {(() => {
+                                          const p = patients.find(pat => pat.id === apt.patientId);
+                                          return p ? getPatientFileNumberDisplay(p, apt.practice) : toFarsiDigits(apt.fileNumber);
+                                        })()}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5" title={apt.serviceName || 'ویزیت عمومی'}>
+                                      {apt.serviceName || 'ویزیت عمومی'}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {isCompleted ? (
+                                      <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded text-[9px] flex items-center gap-0.5">
+                                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> تکمیل
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded text-[9px]">
+                                        رزرو شده
+                                      </span>
+                                    )}
+
+                                    {!isInactive && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCancelGuard(apt)}
+                                        className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-bold transition-colors cursor-pointer shadow-2xs"
+                                      >
+                                        لغو / جابجایی
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Footer: Action button or Full message */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                          {!isFull ? (
+                            <button
+                              type="button"
+                              onClick={() => openNewAppointment({ 
+                                doctorId: doc.id, 
+                                date: selectedDate, 
+                                timeSlot: isFarsiSlot, 
+                                isSlotBooking: true 
+                              })}
+                              className="w-full py-1.5 px-3 bg-white hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 border border-emerald-300 hover:border-emerald-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
+                            >
+                              <span>+ ثبت نوبت</span>
+                              <span className="text-[10px] text-emerald-600 font-normal">
+                                ({toFarsiDigits(remainingCapacity)} ظرفیت خالی)
+                              </span>
+                            </button>
+                          ) : (
+                            <div className="w-full py-1.5 text-center text-[10px] font-bold text-slate-400 bg-slate-100 rounded-xl">
+                              ظرفیت ۳ نوبت در این مطب تکمیل است
+                            </div>
+                          )}
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

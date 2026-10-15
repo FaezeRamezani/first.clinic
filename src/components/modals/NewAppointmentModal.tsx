@@ -1,26 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useClinic, getPhysicalFileNumber, getPatientFileNumberDisplay } from '../../context/ClinicContext';
-import { X, UserPlus, Search, UserCheck, Calendar, Check, Stethoscope, Sparkles, RefreshCw } from 'lucide-react';
+import { X, UserPlus, Search, UserCheck, Calendar, Check, Stethoscope, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
 import { SearchableServiceSelect } from '../common/SearchableServiceSelect';
 import { getTodayJalaliDate, toFarsiDigits, toEnglishDigits } from '../../utils/persianUtils';
-import { 
-  validatePersianName, 
-  validateIranianMobile, 
-  normalizeDigits 
+import {
+  validatePersianName,
+  validateIranianMobile,
+  normalizeDigits,
+  normalizePersianChars,
+  checkDuplicatePatientInPractice,
+  type DuplicatePatientCheckResult
 } from '../../utils/validation';
 import type { Patient } from '../../types';
 
 export const NewAppointmentModal: React.FC = () => {
-  const { 
-    isNewAppointmentOpen, 
+  const {
+    isNewAppointmentOpen,
     setIsNewAppointmentOpen,
     newAppointmentPrefill,
     setNewAppointmentPrefill,
-    patients, 
-    doctors, 
-    services, 
+    patients,
+    doctors,
+    services,
     scope,
     addAppointment,
     addPatient,
@@ -31,7 +34,7 @@ export const NewAppointmentModal: React.FC = () => {
 
   // Navigation Steps: 'select_patient_type' | 'details'
   const [step, setStep] = useState<'select_patient_type' | 'details'>('select_patient_type');
-  
+
   // Patient Selection Mode & Form States
   const [patientTypeChoice, setPatientTypeChoice] = useState<'new' | 'existing'>('existing');
   const [patientSearchTerm, setPatientSearchTerm] = useState<string>('');
@@ -41,6 +44,7 @@ export const NewAppointmentModal: React.FC = () => {
   const [newPatientName, setNewPatientName] = useState<string>('');
   const [newPatientMobile, setNewPatientMobile] = useState<string>('');
   const [validationError, setValidationError] = useState<string>('');
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicatePatientCheckResult | null>(null);
 
   // Appointment Form States
   const [doctorId, setDoctorId] = useState<string>('');
@@ -117,14 +121,16 @@ export const NewAppointmentModal: React.FC = () => {
   // Filter existing patients for Search Box
   const filteredPatients = patients.filter(p => {
     if (!patientSearchTerm.trim()) return false;
-    const term = toEnglishDigits(patientSearchTerm).toLowerCase().trim();
-    const nameMatch = p.name.toLowerCase().includes(term);
+    const term = normalizePersianChars(toEnglishDigits(patientSearchTerm)).toLowerCase().trim();
+    const normName = normalizePersianChars(p.name).toLowerCase();
+    const nameMatch = normName.includes(term);
     const mobileMatch = toEnglishDigits(p.mobile).includes(term);
+    const nationalMatch = !!p.nationalId && toEnglishDigits(p.nationalId).includes(term);
     const fileMatch = (p.fileNumber && toEnglishDigits(p.fileNumber).toLowerCase().includes(term)) ||
-                      getPhysicalFileNumber(p, 'dental').includes(term) ||
-                      getPhysicalFileNumber(p, 'aesthetic').includes(term);
-    return nameMatch || mobileMatch || fileMatch;
-  }).slice(0, 6);
+      getPhysicalFileNumber(p, 'dental').includes(term) ||
+      getPhysicalFileNumber(p, 'aesthetic').includes(term);
+    return nameMatch || mobileMatch || nationalMatch || fileMatch;
+  });
 
   const handleDateOrTimeOrDoctorChange = (newDate: string, newSlot: string, newDocId: string) => {
     setDate(newDate);
@@ -134,8 +140,7 @@ export const NewAppointmentModal: React.FC = () => {
     if (newDocId) {
       const isConflict = checkAppointmentConflict(newDate, newSlot, newDocId, newAppointmentPrefill?.previousAppointmentId);
       if (isConflict) {
-        const doc = doctors.find(d => d.id === newDocId);
-        setConflictError(`⚠️ زمان ${newSlot} در تاریخ ${newDate} برای ${doc?.name || 'پزشک'} قبلاً پر شده است.`);
+        setConflictError('⚠️ ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
       } else {
         setConflictError('');
       }
@@ -169,11 +174,19 @@ export const NewAppointmentModal: React.FC = () => {
     setNewPatientName(cleanName);
     setNewPatientMobile(cleanMobile);
 
-    // Check if patient with same mobile already exists to prevent duplicate creation!
-    const existingPat = patients.find(p => p.mobile === cleanMobile);
-    if (existingPat) {
-      setChosenPatient(existingPat);
+    const targetPractice: 'aesthetic' | 'dental' = doctorId
+      ? (doctors.find(d => d.id === doctorId)?.practice || (scope === 'dental' ? 'dental' : 'aesthetic'))
+      : (scope === 'dental' ? 'dental' : 'aesthetic');
+
+    // Check for duplicate name or phone in target practice
+    const dupCheck = checkDuplicatePatientInPractice(cleanName, cleanMobile, targetPractice, patients);
+    if (dupCheck.hasDuplicate) {
+      setDuplicateWarning(dupCheck);
+      return;
     }
+
+    setChosenPatient(null);
+    setDuplicateWarning(null);
     setStep('details');
   };
 
@@ -186,7 +199,7 @@ export const NewAppointmentModal: React.FC = () => {
     }
 
     if (checkAppointmentConflict(date, timeSlot, doctorId, newAppointmentPrefill?.previousAppointmentId)) {
-      setConflictError('⚠️ تداخل زمان وجود دارد. لطفاً زمان دیگری انتخاب کنید.');
+      setConflictError('⚠️ ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
       return;
     }
 
@@ -196,16 +209,6 @@ export const NewAppointmentModal: React.FC = () => {
     let patId = chosenPatient ? chosenPatient.id : '';
     let patName = chosenPatient ? chosenPatient.name : newPatientName;
     let patMobile = chosenPatient ? chosenPatient.mobile : (newPatientMobile || '۰۹۱۲۰۰۰۰۰۰۰');
-
-    // Check once again if new patient mobile matches existing patient to avoid duplicates
-    if (!chosenPatient && newPatientMobile) {
-      const existing = patients.find(p => p.mobile === normalizeDigits(newPatientMobile.trim()));
-      if (existing) {
-        patId = existing.id;
-        patName = existing.name;
-        patMobile = existing.mobile;
-      }
-    }
 
     // If still no patient ID (genuinely brand new patient), create new patient record first
     if (!patId) {
@@ -268,7 +271,7 @@ export const NewAppointmentModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
@@ -299,11 +302,10 @@ export const NewAppointmentModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPatientTypeChoice('existing')}
-                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                  patientTypeChoice === 'existing'
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${patientTypeChoice === 'existing'
                     ? 'bg-indigo-50/80 border-indigo-400 text-indigo-950 font-bold shadow-2xs'
                     : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <UserCheck className="w-5 h-5 text-indigo-600" />
@@ -318,11 +320,10 @@ export const NewAppointmentModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPatientTypeChoice('new')}
-                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                  patientTypeChoice === 'new'
+                className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${patientTypeChoice === 'new'
                     ? 'bg-emerald-50/80 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
                     : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <UserPlus className="w-5 h-5 text-emerald-600" />
@@ -345,17 +346,17 @@ export const NewAppointmentModal: React.FC = () => {
                     autoFocus
                     value={patientSearchTerm}
                     onChange={(e) => setPatientSearchTerm(e.target.value)}
-                    placeholder="جستجوی بیمار با شماره پرونده یا شماره همراه..."
+                    placeholder="جستجوی بیمار با نام، شماره پرونده، کد ملی یا شماره همراه..."
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl pr-9 pl-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
                   />
                 </div>
 
                 {patientSearchTerm.trim() && filteredPatients.length === 0 && (
-                  <p className="text-[11px] text-slate-400 text-center py-4">بیماری با این شماره پرونده یا همراه یافت نشد.</p>
+                  <p className="text-[11px] text-slate-400 text-center py-4">بیماری با این مشخصات یافت نشد.</p>
                 )}
 
                 {filteredPatients.length > 0 && (
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 max-h-48 overflow-y-auto">
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl bg-slate-50 max-h-60 overflow-y-auto">
                     {filteredPatients.map(p => (
                       <div
                         key={p.id}
@@ -415,12 +416,70 @@ export const NewAppointmentModal: React.FC = () => {
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold outline-none focus:border-emerald-500 dir-ltr text-right"
                   />
                 </div>
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer"
-                >
-                  ادامه و تعیین زمان نوبت
-                </button>
+
+                {/* Duplicate Warning Banner in Step 1 */}
+                {duplicateWarning && (
+                  <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-3 animate-in fade-in duration-150">
+                    <div className="flex items-start gap-2.5 text-amber-900">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1 text-xs">
+                        <p className="font-extrabold text-amber-950">
+                          {duplicateWarning.duplicateType === 'both' && 'بیماری با نام و شماره تلفن واردشده در بیماران همین مطب وجود دارد. آیا ثبت بیمار جدید با این مشخصات مورد تأیید است؟'}
+                          {duplicateWarning.duplicateType === 'name' && 'بیماری با نام واردشده در بیماران همین مطب وجود دارد. آیا ثبت بیمار جدید با این مشخصات مورد تأیید است؟'}
+                          {duplicateWarning.duplicateType === 'mobile' && 'بیماری با شماره تلفن واردشده در بیماران همین مطب وجود دارد. آیا ثبت بیمار جدید با این مشخصات مورد تأیید است؟'}
+                        </p>
+                        <p className="text-[11px] text-amber-800">
+                          مشخصه تکراری: <span className="font-bold underline">{duplicateWarning.duplicateType === 'both' ? 'نام و شماره تلفن' : duplicateWarning.duplicateType === 'name' ? 'نام بیمار' : 'شماره تلفن'}</span> در مطب {scope === 'dental' ? 'دندانپزشکی' : 'زیبایی'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Matched patients list */}
+                    <div className="bg-white/90 rounded-xl p-2.5 border border-amber-200 space-y-1.5 max-h-32 overflow-y-auto">
+                      <span className="text-[10px] font-bold text-slate-500 block">بیمار(ان) منطبق موجود در این مطب:</span>
+                      {duplicateWarning.matchedPatients.map((mp) => (
+                        <div key={mp.id} className="flex items-center justify-between text-[11px] py-1 border-b border-amber-100 last:border-0">
+                          <span className="font-bold text-slate-800">{mp.name}</span>
+                          <div className="flex items-center gap-2 text-slate-600 font-mono text-[10px]">
+                            {mp.physicalFileNumber && <span>پرونده: {toFarsiDigits(mp.physicalFileNumber)}</span>}
+                            <span>تلفن: {toFarsiDigits(mp.mobile)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Two clear choices */}
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-amber-200">
+                      <button
+                        type="button"
+                        onClick={() => setDuplicateWarning(null)}
+                        className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100/70 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        بازگشت و اصلاح اطلاعات
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChosenPatient(null);
+                          setDuplicateWarning(null);
+                          setStep('details');
+                        }}
+                        className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-extrabold shadow-xs transition-colors cursor-pointer"
+                      >
+                        تأیید و ثبت بیمار جدید
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!duplicateWarning && (
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                  >
+                    ادامه و تعیین زمان نوبت
+                  </button>
+                )}
               </form>
             )}
           </div>
@@ -429,7 +488,7 @@ export const NewAppointmentModal: React.FC = () => {
         {/* STEP 2: Appointment Details Form */}
         {step === 'details' && (
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            
+
             {/* Patient Read-only Summary Banner */}
             <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-2xl flex items-center justify-between">
               <div>
@@ -566,11 +625,10 @@ export const NewAppointmentModal: React.FC = () => {
               <button
                 type="submit"
                 disabled={!!conflictError || !doctorId}
-                className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors ${
-                  conflictError || !doctorId
+                className={`px-4 py-2 rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors ${conflictError || !doctorId
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                }`}
+                  }`}
               >
                 {isRescheduleMode ? 'تأیید نهایی تغییر نوبت' : 'ثبت نوبت در تقویم'}
               </button>

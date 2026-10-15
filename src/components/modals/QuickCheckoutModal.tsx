@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useClinic, PRACTICE_PAYMENT_ACCOUNTS, getPatientFileNumberDisplay } from '../../context/ClinicContext';
 import { formatCurrency, toFarsiDigits, getTodayJalaliDate, getJalaliDateOffset } from '../../utils/persianUtils';
-import { X, CalendarPlus, CreditCard } from 'lucide-react';
+import { X, CalendarPlus, CreditCard, Trash2 } from 'lucide-react';
 import { JalaliDatePicker } from '../common/JalaliDatePicker';
 import { TimeSlotPicker } from '../common/TimeSlotPicker';
 import { SearchableServiceSelect } from '../common/SearchableServiceSelect';
@@ -31,9 +31,16 @@ export const QuickCheckoutModal: React.FC = () => {
   const validServices = services.filter(s => s.active !== false && s.practice === targetPractice);
   const availableAccounts = getPracticePaymentAccounts(targetPractice);
 
-  const [selectedServiceId, setSelectedServiceId] = useState<string>('');
-  const [totalCost, setTotalCost] = useState<number>(0);
-  const [discount, setDiscount] = useState<number>(0);
+  interface SelectedServiceEntry {
+    id: string;
+    serviceId: string;
+    name: string;
+    cost: number;
+    duration?: number;
+    defaultPaymentTermDays?: number;
+  }
+
+  const [selectedServices, setSelectedServices] = useState<SelectedServiceEntry[]>([]);
   const [paidAmount, setPaidAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer'>('pos_aesthetic');
   const [posAccount, setPosAccount] = useState<string>('');
@@ -65,19 +72,22 @@ export const QuickCheckoutModal: React.FC = () => {
 
       const matchedService = valid.find(s => s.id === apt.serviceId);
       if (matchedService) {
-        setSelectedServiceId(matchedService.id);
-        setTotalCost(matchedService.price);
-        setPaidAmount(matchedService.price);
+        setSelectedServices([{
+          id: `srv-${matchedService.id}-${Date.now()}`,
+          serviceId: matchedService.id,
+          name: matchedService.name,
+          cost: 0,
+          duration: matchedService.duration,
+          defaultPaymentTermDays: matchedService.defaultPaymentTermDays
+        }]);
         const termDays = matchedService.defaultPaymentTermDays && matchedService.defaultPaymentTermDays > 0 ? matchedService.defaultPaymentTermDays : 10;
         setDebtDueDate(getJalaliDateOffset(getTodayJalaliDate(), termDays));
       } else {
-        // Clear invalid or unset service
-        setSelectedServiceId('');
-        setTotalCost(0);
-        setPaidAmount(0);
+        setSelectedServices([]);
         setDebtDueDate(getJalaliDateOffset(getTodayJalaliDate(), 10));
       }
-      setDiscount(0);
+
+      setPaidAmount(0);
       setPaymentMethod(apt.practice === 'aesthetic' ? 'pos_aesthetic' : 'pos_dental');
       const accounts = PRACTICE_PAYMENT_ACCOUNTS[scope] || PRACTICE_PAYMENT_ACCOUNTS.aesthetic;
       setPosAccount(accounts[0] || 'کارتخوان');
@@ -91,9 +101,6 @@ export const QuickCheckoutModal: React.FC = () => {
       );
       if (foundDeposit) {
         setApplyDeposit(true);
-        const srvPrice = matchedService ? matchedService.price : 0;
-        const deduction = Math.min(foundDeposit.remainingAmount, srvPrice);
-        setPaidAmount(Math.max(0, srvPrice - deduction));
       } else {
         setApplyDeposit(false);
       }
@@ -110,21 +117,47 @@ export const QuickCheckoutModal: React.FC = () => {
 
   if (!isQuickCheckoutOpen || !apt) return null;
 
-  const handleServiceChange = (srvId: string) => {
-    setSelectedServiceId(srvId);
+  const handleAddService = (srvId: string) => {
+    if (!srvId) return;
     const srv = validServices.find(s => s.id === srvId);
-    if (srv) {
-      setTotalCost(srv.price);
-      setDiscount(0);
-      const deduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, srv.price) : 0;
-      setPaidAmount(Math.max(0, srv.price - deduction));
-      const termDays = srv.defaultPaymentTermDays && srv.defaultPaymentTermDays > 0 ? srv.defaultPaymentTermDays : 10;
-      setDebtDueDate(getJalaliDateOffset(getTodayJalaliDate(), termDays));
-    } else {
-      setTotalCost(0);
-      setPaidAmount(0);
-      setDiscount(0);
+    if (!srv) return;
+    if (selectedServices.some(s => s.serviceId === srvId)) return;
+
+    setSelectedServices(prev => [
+      ...prev,
+      {
+        id: `srv-${srv.id}-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        serviceId: srv.id,
+        name: srv.name,
+        cost: 0,
+        duration: srv.duration,
+        defaultPaymentTermDays: srv.defaultPaymentTermDays
+      }
+    ]);
+
+    if (srv.defaultPaymentTermDays && srv.defaultPaymentTermDays > 0) {
+      setDebtDueDate(getJalaliDateOffset(getTodayJalaliDate(), srv.defaultPaymentTermDays));
     }
+  };
+
+  const handleUpdateServiceCost = (itemId: string, newCost: number) => {
+    setSelectedServices(prev => {
+      const updated = prev.map(s => s.id === itemId ? { ...s, cost: newCost } : s);
+      const newTotal = updated.reduce((sum, s) => sum + s.cost, 0);
+      const deduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, newTotal) : 0;
+      setPaidAmount(Math.max(0, newTotal - deduction));
+      return updated;
+    });
+  };
+
+  const handleRemoveService = (itemId: string) => {
+    setSelectedServices(prev => {
+      const updated = prev.filter(s => s.id !== itemId);
+      const newTotal = updated.reduce((sum, s) => sum + s.cost, 0);
+      const deduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, newTotal) : 0;
+      setPaidAmount(Math.max(0, newTotal - deduction));
+      return updated;
+    });
   };
 
   const handleNextVisitChange = (newDate: string, newSlot: string, srvId?: string) => {
@@ -137,29 +170,29 @@ export const QuickCheckoutModal: React.FC = () => {
     if (isFollowUpVisitEnabled) {
       const isConflict = checkAppointmentConflict(newDate, newSlot, apt?.doctorId || nextVisitDoctorId);
       if (isConflict) {
-        setNextVisitError(`⚠️ زمان ${newSlot} در تاریخ ${newDate} برای پزشک معالج پر است.`);
+        setNextVisitError('⚠️ ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
       } else {
         setNextVisitError('');
       }
     }
   };
 
-  const netCost = Math.max(0, totalCost - discount);
-  const depositDeduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, netCost) : 0;
-  const payableAfterDeposit = Math.max(0, netCost - depositDeduction);
+  const totalCost = selectedServices.reduce((sum, s) => sum + s.cost, 0);
+  const netCost = totalCost;
+  const depositDeduction = (applyDeposit && activeDeposit) ? Math.min(activeDeposit.remainingAmount, totalCost) : 0;
+  const payableAfterDeposit = Math.max(0, totalCost - depositDeduction);
   const remainingDebt = Math.max(0, payableAfterDeposit - paidAmount);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const srv = validServices.find(s => s.id === selectedServiceId);
-    if (!srv) return;
+    if (selectedServices.length === 0) return;
 
     // Generate Current Payment Timestamp e.g. "۱۴:۳۵"
     const now = new Date();
     const currentTimestamp = toFarsiDigits(now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }));
 
-    // Record checkout transaction
-    recordCheckout({
+    // Record checkout transaction for all selected services
+    await recordCheckout({
       patientId: apt.patientId,
       patientName: apt.patientName,
       fileNumber: apt.fileNumber,
@@ -167,10 +200,13 @@ export const QuickCheckoutModal: React.FC = () => {
       practice: apt.practice,
       date: getTodayJalaliDate(),
       timestamp: currentTimestamp,
-      serviceName: srv.name,
+      services: selectedServices.map(s => ({
+        serviceId: s.serviceId,
+        serviceName: s.name,
+        cost: s.cost,
+        defaultPaymentTermDays: s.defaultPaymentTermDays
+      })),
       totalCost,
-      discount,
-      netCost,
       paidAmount,
       remainingDebt,
       paymentMethod,
@@ -225,15 +261,106 @@ export const QuickCheckoutModal: React.FC = () => {
 
           {/* Scrollable Form Body */}
           <div className="p-5 overflow-y-auto flex-1 space-y-4">
-            {/* Service Searchable Selector */}
+            {/* Service Searchable Selector & Add */}
             <div>
-              <label className="block font-bold text-slate-700 mb-1">انتخاب خدمت ارائه شده:</label>
+              <label className="block font-bold text-slate-700 mb-1">
+                انتخاب و افزودن خدمات ارائه شده:
+              </label>
               <SearchableServiceSelect
-                services={validServices}
-                selectedServiceId={selectedServiceId}
-                onChange={handleServiceChange}
-                placeholder="جستجوی خدمت..."
+                services={validServices.filter(s => !selectedServices.some(sel => sel.serviceId === s.id))}
+                selectedServiceId=""
+                onChange={handleAddService}
+                placeholder="جستجو و انتخاب خدمت برای افزودن به لیست..."
               />
+            </div>
+
+            {/* Selected Services List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700 text-xs">
+                  فهرست خدمات انتخاب‌شده ({toFarsiDigits(selectedServices.length)} خدمت):
+                </span>
+                {selectedServices.length > 0 && (
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    مبلغ هزینه هر خدمت را مشخص کنید
+                  </span>
+                )}
+              </div>
+
+              {selectedServices.length === 0 ? (
+                <div className="p-4 border-2 border-dashed border-amber-200 bg-amber-50/50 rounded-2xl text-center space-y-1">
+                  <p className="text-xs font-bold text-amber-800">
+                    هنوز خدمتی انتخاب نشده است.
+                  </p>
+                  <p className="text-[11px] text-amber-700">
+                    لطفاً از کادر بالا حداقل یک خدمت را جستجو و اضافه کنید.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
+                  {selectedServices.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="p-3 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors"
+                    >
+                      {/* Service Info */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                          {toFarsiDigits(index + 1)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 text-xs truncate">{item.name}</p>
+                          {item.duration && (
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              مدت: {toFarsiDigits(item.duration)} دقیقه
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Cost Input & Remove Button */}
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                        <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-slate-200 focus-within:border-indigo-500">
+                          <span className="text-[10px] font-bold text-slate-500">مبلغ:</span>
+                          <MoneyInput
+                            value={item.cost}
+                            onChange={(val) => handleUpdateServiceCost(item.id, val)}
+                            unit="تومان"
+                            placeholder="۰"
+                            className="text-xs py-0.5 w-28 font-bold text-slate-900 border-none bg-transparent outline-none p-0"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveService(item.id)}
+                          title="حذف این خدمت"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Total Cost Summary Card */}
+            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700">مجموع هزینه کل خدمات:</span>
+                <span className="font-black text-sm text-slate-900 dir-ltr text-left">
+                  {formatCurrency(totalCost)}
+                </span>
+              </div>
+
+              {applyDeposit && depositDeduction > 0 && (
+                <div className="flex items-center justify-between text-xs font-bold text-indigo-900 bg-indigo-50/80 p-2 rounded-xl border border-indigo-200">
+                  <span>مانده قابل تسویه پس از کسر بیعانه:</span>
+                  <span className="text-xs font-black dir-ltr text-left">{formatCurrency(payableAfterDeposit)}</span>
+                </div>
+              )}
             </div>
 
             {/* Active Deposit Notification Banner */}
@@ -280,38 +407,6 @@ export const QuickCheckoutModal: React.FC = () => {
               </div>
             )}
 
-            {/* Pricing Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <div>
-                <label className="block font-bold text-slate-600 mb-1 text-[11px]">مبلغ کل (تومان):</label>
-                <MoneyInput
-                  value={totalCost}
-                  onChange={(val) => setTotalCost(val)}
-                  unit=""
-                  className="text-xs py-1.5 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-600 mb-1 text-[11px]">تخفیف (تومان):</label>
-                <MoneyInput
-                  value={discount}
-                  onChange={(val) => setDiscount(val)}
-                  unit=""
-                  className="text-xs py-1.5 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-indigo-700 mb-1 text-[11px]">
-                  {applyDeposit && depositDeduction > 0 ? 'مانده قابل تسویه:' : 'قابل پرداخت نهایی:'}
-                </label>
-                <div className="w-full bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-1.5 text-indigo-900 font-extrabold text-xs text-left dir-ltr">
-                  {formatCurrency(payableAfterDeposit)}
-                </div>
-              </div>
-            </div>
-
             {/* Payment Method & POS Dropdown */}
             <div className="space-y-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
               <div>
@@ -340,7 +435,7 @@ export const QuickCheckoutModal: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-rose-800 mb-1 text-[11px]">مانده بدهی این خدمت:</label>
+                  <label className="block font-bold text-rose-800 mb-1 text-[11px]">مانده بدهی این مراجعه:</label>
                   <div className={`w-full border rounded-xl px-3 py-1.5 font-extrabold text-xs text-left dir-ltr ${remainingDebt > 0 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
                     {formatCurrency(remainingDebt)}
                   </div>
@@ -366,7 +461,7 @@ export const QuickCheckoutModal: React.FC = () => {
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="مثلاً: تخفیف با موافقت پزشک..."
+                placeholder="مثلاً: هماهنگی با پزشک معالج..."
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500"
               />
             </div>
@@ -453,8 +548,8 @@ export const QuickCheckoutModal: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={!selectedServiceId || (isFollowUpVisitEnabled && !!nextVisitError)}
-              className={`px-5 py-2 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer ${!selectedServiceId || (isFollowUpVisitEnabled && nextVisitError)
+              disabled={selectedServices.length === 0 || (isFollowUpVisitEnabled && !!nextVisitError)}
+              className={`px-5 py-2 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer ${selectedServices.length === 0 || (isFollowUpVisitEnabled && nextVisitError)
                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                 }`}

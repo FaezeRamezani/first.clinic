@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useClinic } from '../../context/ClinicContext';
-import { formatCurrency, toFarsiDigits } from '../../utils/persianUtils';
+import { toFarsiDigits } from '../../utils/persianUtils';
 import { Plus, Sparkles, Stethoscope, CheckCircle2, XCircle, Edit3, Clock } from 'lucide-react';
-import { MoneyInput } from '../common/MoneyInput';
 import type { ServiceItem } from '../../types';
 
 export const ServicesView: React.FC = () => {
@@ -14,7 +13,6 @@ export const ServicesView: React.FC = () => {
   const [name, setName] = useState<string>('');
   const [code, setCode] = useState<string>('');
   const [practice, setPractice] = useState<'aesthetic' | 'dental'>('aesthetic');
-  const [price, setPrice] = useState<number>(0);
   const [duration, setDuration] = useState<string>('30');
   const [description, setDescription] = useState<string>('');
   const [defaultPaymentTermDays, setDefaultPaymentTermDays] = useState<number | ''>('');
@@ -26,7 +24,6 @@ export const ServicesView: React.FC = () => {
     setName('');
     setCode('');
     setPractice(scope === 'dental' ? 'dental' : 'aesthetic');
-    setPrice(0);
     setDuration('30');
     setDescription('');
     setDefaultPaymentTermDays('');
@@ -38,7 +35,6 @@ export const ServicesView: React.FC = () => {
     setName(srv.name);
     setCode(srv.code);
     setPractice(srv.practice);
-    setPrice(srv.price);
     setDuration(String(srv.duration));
     setDescription(srv.description || '');
     setDefaultPaymentTermDays(srv.defaultPaymentTermDays !== undefined && srv.defaultPaymentTermDays !== null ? srv.defaultPaymentTermDays : '');
@@ -46,7 +42,7 @@ export const ServicesView: React.FC = () => {
   };
 
   const handleSaveService = () => {
-    if (!name || !name.trim() || price < 0) return;
+    if (!name || !name.trim()) return;
 
     const parsedDays = typeof defaultPaymentTermDays === 'number'
       ? defaultPaymentTermDays
@@ -59,7 +55,7 @@ export const ServicesView: React.FC = () => {
         name: name.trim(),
         code: code.trim() || `SRV-${Math.floor(100 + Math.random() * 900)}`,
         practice,
-        price: typeof price === 'number' ? price : parseInt(String(price), 10),
+        price: 0,
         duration: parseInt(duration, 10),
         description: description.trim(),
         defaultPaymentTermDays: safeDays
@@ -69,7 +65,7 @@ export const ServicesView: React.FC = () => {
         name: name.trim(),
         code: code.trim() || `SRV-${Math.floor(100 + Math.random() * 900)}`,
         practice,
-        price: typeof price === 'number' ? price : parseInt(String(price), 10),
+        price: 0,
         duration: parseInt(duration, 10),
         description: description.trim(),
         defaultPaymentTermDays: safeDays,
@@ -86,9 +82,9 @@ export const ServicesView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">تعرفه خدمات کلینیک و مطب‌ها</h2>
+          <h2 className="text-lg font-bold text-slate-800">مدیریت خدمات کلینیک و مطب‌ها</h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            مدیریت قیمت‌های مصوب، توضیحات، مهلت پرداخت پیش‌فرض و بازه زمان استاندارد خدمات
+            مدیریت عنوان، توضیحات، مهلت پرداخت پیش‌فرض و بازه زمان استاندارد خدمات
           </p>
         </div>
 
@@ -110,7 +106,6 @@ export const ServicesView: React.FC = () => {
                 <th className="py-3 px-4">کد خدمت</th>
                 <th className="py-3 px-4">عنوان خدمت</th>
                 <th className="py-3 px-4">مطب مربوطه</th>
-                <th className="py-3 px-4">تعرفه قیمت مصوب (تومان)</th>
                 <th className="py-3 px-4">مدت زمان استاندارد</th>
                 <th className="py-3 px-4">مهلت پرداخت پیش‌فرض</th>
                 <th className="py-3 px-4">توضیحات تکمیلی</th>
@@ -134,7 +129,6 @@ export const ServicesView: React.FC = () => {
                       </span>
                     )}
                   </td>
-                  <td className="py-3.5 px-4 font-black text-slate-900 text-sm">{formatCurrency(srv.price)}</td>
                   <td className="py-3.5 px-4 text-slate-600">{toFarsiDigits(srv.duration)} دقیقه</td>
                   <td className="py-3.5 px-4 text-indigo-900 font-bold">
                     {srv.defaultPaymentTermDays ? (
@@ -190,9 +184,9 @@ export const ServicesView: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-sm font-bold text-slate-800">
-                {editingServiceId ? 'ویرایش خدمت و تعرفه' : 'تعریف خدمت و تعرفه جدید'}
+                {editingServiceId ? 'ویرایش خدمت' : 'تعریف خدمت جدید'}
               </h3>
-              <button onClick={() => setIsServiceModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">✕</button>
+              <button onClick={() => setIsServiceModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">✕</button>
             </div>
 
             <div className="space-y-3 text-xs">
@@ -205,17 +199,6 @@ export const ServicesView: React.FC = () => {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="مثال: کامپوزیت لیرینگ دندان"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 font-bold"
-                />
-              </div>
-
-              {/* Tariff Price */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">تعرفه قیمت مصوب (تومان):</label>
-                <MoneyInput
-                  value={price}
-                  onChange={(val) => setPrice(val)}
-                  unit="تومان"
-                  className="bg-slate-50 text-xs font-bold text-slate-800"
                 />
               </div>
 

@@ -46,18 +46,21 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
   const normValue = toEnglishDigits(value).trim();
 
   const doctor = doctors.find(d => d.id === doctorId);
+  const targetPractice = doctor?.practice;
   const dayName = getJalaliDayOfWeekName(date);
   const daySchedule = doctor?.weeklySchedule?.find(d => d.day === dayName);
 
-  // Find occupied slots for specified doctor and date
-  const isSlotOccupied = (slotStr: string) => {
+  // Find active appointments count for specified practice, date, and slot
+  const getSlotActiveCount = (slotStr: string) => {
     const normSlot = toEnglishDigits(slotStr).trim();
-    return appointments.some(apt => {
-      if (apt.id === excludeAppointmentId || apt.status === 'canceled' || apt.status === 'rescheduled') return false;
+    return appointments.filter(apt => {
+      if (excludeAppointmentId && apt.id === excludeAppointmentId) return false;
+      if (apt.status === 'canceled' || apt.status === 'rescheduled') return false;
+      if (targetPractice && apt.practice !== targetPractice) return false;
       const aptDate = toEnglishDigits(apt.date).trim().replace(/\//g, '-');
       const aptSlot = toEnglishDigits(apt.timeSlot).trim();
-      return apt.doctorId === doctorId && aptDate === normDate && aptSlot === normSlot;
-    });
+      return aptDate === normDate && aptSlot === normSlot;
+    }).length;
   };
 
   const renderSlotButtons = (slots: string[]) => {
@@ -66,24 +69,37 @@ export const TimeSlotPicker: React.FC<TimeSlotPickerProps> = ({
         {slots.map(slot => {
           const normSlot = toEnglishDigits(slot).trim();
           const farsiSlot = toFarsiDigits(slot);
-          const occupied = isSlotOccupied(slot);
+          const activeCount = getSlotActiveCount(slot);
+          const isFull = activeCount >= 3;
           const isSelected = normValue === normSlot;
 
           return (
             <button
               key={slot}
               type="button"
-              disabled={occupied}
+              disabled={isFull}
               onClick={() => onChange(farsiSlot)}
-              className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all dir-ltr text-center cursor-pointer select-none ${
+              title={isFull ? 'ظرفیت این بازه زمانی در این مطب تکمیل شده است (۳/۳)' : `${activeCount} از ۳ نوبت رزرو شده`}
+              className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all dir-ltr text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer select-none ${
                 isSelected
                   ? 'bg-indigo-600 text-white shadow-xs scale-105 font-black ring-2 ring-indigo-300'
-                  : occupied
-                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed line-through opacity-70'
+                  : isFull
+                    ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60 line-through'
                     : 'bg-slate-50 border border-slate-300 hover:border-indigo-400 hover:bg-indigo-50 text-slate-800'
               }`}
             >
-              {farsiSlot}
+              <span>{farsiSlot}</span>
+              <span className={`text-[9px] font-medium ${
+                isSelected 
+                  ? 'text-indigo-100' 
+                  : isFull 
+                    ? 'text-slate-400' 
+                    : activeCount > 0 
+                      ? 'text-amber-600 font-bold' 
+                      : 'text-slate-400'
+              }`}>
+                {isFull ? 'تکمیل (۳/۳)' : activeCount > 0 ? `(${toFarsiDigits(activeCount)}/۳)` : 'ظرفیت: ۳'}
+              </span>
             </button>
           );
         })}

@@ -73,7 +73,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       id: 'services',
-      label: 'تعرفه خدمات',
+      label: 'مدیریت خدمات',
       icon: Tag,
       badge: null
     },

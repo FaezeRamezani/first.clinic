@@ -101,7 +101,7 @@ export const OnlineRequestsTab: React.FC = () => {
     // Conflict Check
     const isConflict = checkAppointmentConflict(newDate, newSlot, newDocId);
     if (isConflict) {
-      setApprovalError(`⚠️ زمان ${toFarsiDigits(newSlot)} در تاریخ ${newDate} برای ${docName} قبلاً رزرو شده است! لطفاً زمان دیگری را انتخاب کنید.`);
+      setApprovalError('⚠️ ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
     } else {
       setApprovalError('');
     }
@@ -117,7 +117,7 @@ export const OnlineRequestsTab: React.FC = () => {
     // Double check conflict
     const isConflict = checkAppointmentConflict(confirmedDate, confirmedTimeSlot, confirmedDoctorId);
     if (isConflict) {
-      setApprovalError('⚠️ تداخل زمان وجود دارد. امکان ثبت در این ساعت پر وجود ندارد.');
+      setApprovalError('⚠️ ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
       return;
     }
 

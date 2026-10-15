@@ -9,7 +9,7 @@ const createServiceSchema = z.object({
   name: z.string().min(1, 'نام خدمت الزامی است'),
   code: z.string().min(1, 'کد خدمت الزامی است'),
   practice: z.enum(['aesthetic', 'dental']),
-  price: z.number().int().min(0, 'قیمت نباید منفی باشد'),
+  price: z.number().int().min(0, 'قیمت نباید منفی باشد').optional().default(0),
   duration: z.number().int().positive('مدت زمان باید عدد مثبت باشد'),
   description: z.string().optional().nullable(),
   defaultPaymentTermDays: z.number().int().min(0).optional().nullable(),

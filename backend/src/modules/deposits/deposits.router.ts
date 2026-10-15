@@ -334,18 +334,18 @@ export async function depositsRouter(fastify: FastifyInstance) {
           });
         }
 
-        // Conflict check
+        // Capacity check: Max 3 active appointments for practice, date, slot
         const existingApts = db.select().from(appointments).all();
-        const conflict = existingApts.some(a => {
+        const activeInSlot = existingApts.filter(a => {
           if (a.status === 'canceled' || a.status === 'rescheduled') return false;
-          if (a.doctorId !== doc.id) return false;
+          if (a.practice !== data.practice) return false;
           return toStandardJalaliDbDate(a.date) === stdAptDate && toEnglishDigits(a.timeSlot).trim() === stdSlot;
         });
 
-        if (conflict) {
-          return reply.status(400).send({
+        if (activeInSlot.length >= 3) {
+          return reply.status(409).send({
             success: false,
-            error: 'این زمان برای پزشک معالج قبلاً رزرو شده است.'
+            error: 'ظرفیت این بازه زمانی در این مطب تکمیل شده است.'
           });
         }
 
@@ -518,16 +518,17 @@ export async function depositsRouter(fastify: FastifyInstance) {
         }
 
         const existingApts = db.select().from(appointments).all();
-        const conflict = existingApts.some(a => {
+        const activeInSlot = existingApts.filter(a => {
+          if (dep.appointmentId && a.id === dep.appointmentId) return false;
           if (a.status === 'canceled' || a.status === 'rescheduled') return false;
-          if (a.doctorId !== doc.id) return false;
+          if (a.practice !== dep.practice) return false;
           return toStandardJalaliDbDate(a.date) === stdAptDate && toEnglishDigits(a.timeSlot).trim() === stdSlot;
         });
 
-        if (conflict) {
-          return reply.status(400).send({
+        if (activeInSlot.length >= 3) {
+          return reply.status(409).send({
             success: false,
-            error: 'این زمان برای پزشک معالج قبلاً رزرو شده است.'
+            error: 'ظرفیت این بازه زمانی در این مطب تکمیل شده است.'
           });
         }
 

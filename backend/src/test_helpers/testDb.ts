@@ -20,7 +20,9 @@ export function assertTestDbSafety(targetPath?: string): void {
     path.resolve(process.cwd(), 'data/clinic.db').toLowerCase(),
     path.resolve(process.cwd(), '../data/clinic.db').toLowerCase(),
     path.resolve('D:/Test1/clinic-management/backend/data/clinic.db').toLowerCase(),
-    path.resolve('D:/Test1/clinic-management/data/clinic.db').toLowerCase()
+    path.resolve('D:/Test1/clinic-management/data/clinic.db').toLowerCase(),
+    path.resolve('D:/Test1/clinic-management/backend/clinic-live-backup.db').toLowerCase(),
+    path.resolve('D:/Test1/clinic-management/backend/data/clinic-live-backup.db').toLowerCase()
   ];
 
   for (const forbidden of forbiddenFiles) {
@@ -31,10 +33,11 @@ export function assertTestDbSafety(targetPath?: string): void {
     }
   }
 
-  // General protection: Any file simply named "clinic.db" is forbidden in tests
-  if (path.basename(resolved) === 'clinic.db') {
+  // General protection: Any file simply named "clinic.db" or "clinic-live-backup.db" is forbidden in tests
+  const baseName = path.basename(resolved);
+  if (baseName === 'clinic.db' || baseName === 'clinic-live-backup.db') {
     throw new Error(
-      `🚨 CRITICAL SAFETY GUARD VIOLATION: Database name cannot be "clinic.db" in tests. Execution aborted!`
+      `🚨 CRITICAL SAFETY GUARD VIOLATION: Database name "${baseName}" is forbidden in tests. Execution aborted!`
     );
   }
 }
@@ -60,6 +63,8 @@ export async function createIsolatedTestDb(prefix: string = 'test'): Promise<Tes
 
   // Set DATABASE_PATH BEFORE loading any modules that depend on database.ts
   process.env.DATABASE_PATH = tempDbPath;
+  process.env.TEST_DB_PATH = tempDbPath;
+  process.env.NODE_ENV = 'test';
 
   // Enforce safety guard check on the generated temp DB
   assertTestDbSafety(tempDbPath);

@@ -39,6 +39,46 @@ const createObligationSchema = z.object({
   depositId: z.string().optional().nullable()
 });
 
+const checkoutPaymentItemSchema = z.object({
+  method: z.string().optional(),
+  amount: z.number().min(0),
+  paymentAccountId: z.string().optional().nullable(),
+  posAccount: z.string().optional().nullable()
+});
+
+const checkoutServiceItemSchema = z.object({
+  serviceId: z.string().optional().nullable(),
+  serviceName: z.string().optional().nullable(),
+  cost: z.number().optional(),
+  agreedCost: z.number().optional(),
+  defaultPaymentTermDays: z.number().optional().nullable()
+}).transform(s => ({
+  serviceId: s.serviceId || null,
+  serviceName: s.serviceName || null,
+  cost: Math.round(s.cost !== undefined ? s.cost : (s.agreedCost !== undefined ? s.agreedCost : 0)),
+  defaultPaymentTermDays: s.defaultPaymentTermDays || null
+}));
+
+const checkoutSchema = z.object({
+  patientId: z.string().min(1, 'شناسه بیمار الزامی است'),
+  appointmentId: z.string().optional().nullable(),
+  doctorId: z.string().optional().nullable(),
+  practice: z.enum(['aesthetic', 'dental']),
+  services: z.array(checkoutServiceItemSchema).min(1, 'حداقل یک خدمت باید انتخاب شود'),
+  paidAmount: z.number().min(0).optional(),
+  paymentMethod: z.string().optional(),
+  paymentAccountId: z.string().optional().nullable(),
+  posAccount: z.string().optional().nullable(),
+  payments: z.array(checkoutPaymentItemSchema).optional(),
+  depositId: z.string().optional().nullable(),
+  depositDeduction: z.number().min(0).optional(),
+  debtDueDate: z.string().optional().nullable(),
+  notes: z.string().optional().nullable().transform(val => sanitizeFreeText(val, 1000)),
+  timestamp: z.string().optional().nullable(),
+  serviceDate: z.string().optional(),
+  recordDate: z.string().optional()
+});
+
 const createPaymentSchema = z.object({
   id: z.string().optional(),
   obligationId: z.string().optional().nullable(),
@@ -670,6 +710,350 @@ export async function financeRouter(fastify: FastifyInstance) {
       return reply.status(500).send({
         success: false,
         error: 'خطا در ثبت تعهد مالی'
+      });
+    }
+  });
+
+  // POST /api/finance/checkout (Multi-service checkout in atomic transaction)
+  fastify.post('/checkout', async (request, reply) => {
+    try {
+      const result = checkoutSchema.safeParse(request.body);
+      if (!result.success) {
+        return reply.status(400).send({
+          success: false,
+          error: 'اطلاعات تسویه حساب معتبر نیست.',
+          details: result.error.format()
+        });
+      }
+
+      const data = result.data;
+      const todayStr = getTodayJalaliStr();
+      const srvDate = data.serviceDate ? toStandardJalaliDbDate(data.serviceDate) : todayStr;
+      const recDate = data.recordDate ? toStandardJalaliDbDate(data.recordDate) : srvDate;
+
+      // Validate Patient
+      const pt = db.select().from(patients).where(eq(patients.id, data.patientId)).get();
+      if (!pt) {
+        return reply.status(400).send({
+          success: false,
+          error: 'بیمار انتخاب‌شده یافت نشد.'
+        });
+      }
+
+      // Validate appointment if appointmentId provided
+      let aptRecord: typeof appointments.$inferSelect | null = null;
+      if (data.appointmentId) {
+        aptRecord = db.select().from(appointments).where(eq(appointments.id, data.appointmentId)).get() || null;
+        if (!aptRecord) {
+          return reply.status(404).send({
+            success: false,
+            error: 'نوبت مورد نظر یافت نشد.'
+          });
+        }
+        if (aptRecord.status === 'completed') {
+          return reply.status(400).send({
+            success: false,
+            error: 'این نوبت قبلاً تسویه شده است.'
+          });
+        }
+        const existingOb = db.select().from(financialObligations)
+          .where(eq(financialObligations.appointmentId, data.appointmentId))
+          .get();
+        if (existingOb) {
+          return reply.status(400).send({
+            success: false,
+            error: 'برای این نوبت قبلاً تسویه مالی ثبت شده است.'
+          });
+        }
+      }
+
+      // Resolve Service Names from DB if not provided
+      const resolvedServices: Array<{ serviceId: string | null; serviceName: string; cost: number; defaultPaymentTermDays: number | null }> = [];
+      for (const s of data.services) {
+        let name = s.serviceName;
+        let termDays = s.defaultPaymentTermDays;
+        if (s.serviceId) {
+          const srvDb = db.select().from(services).where(eq(services.id, s.serviceId)).get();
+          if (!srvDb) {
+            return reply.status(400).send({
+              success: false,
+              error: `خدمت با شناسه ${s.serviceId} یافت نشد.`
+            });
+          }
+          if (!name) name = srvDb.name;
+          if (termDays === null || termDays === undefined) termDays = srvDb.defaultPaymentTermDays;
+        }
+        resolvedServices.push({
+          serviceId: s.serviceId || null,
+          serviceName: name || 'خدمت درمانی',
+          cost: s.cost,
+          defaultPaymentTermDays: termDays || null
+        });
+      }
+
+      const totalCost = resolvedServices.reduce((sum, s) => sum + s.cost, 0);
+
+      // Resolve deposit
+      let appliedDepositAmount = 0;
+      let matchedDeposit: typeof deposits.$inferSelect | null = null;
+      if (data.depositId) {
+        matchedDeposit = db.select().from(deposits).where(eq(deposits.id, data.depositId)).get() || null;
+      } else if (data.depositDeduction && data.depositDeduction > 0) {
+        const patientDeposits = db.select().from(deposits)
+          .where(and(eq(deposits.patientId, data.patientId), eq(deposits.practice, data.practice)))
+          .all();
+        matchedDeposit = patientDeposits.find(d => (d.status === 'active' || d.status === 'partially_applied' || d.status === 'partially_allocated') && d.remainingAmount > 0) || null;
+      }
+
+      if (matchedDeposit) {
+        if (matchedDeposit.patientId !== data.patientId || matchedDeposit.practice !== data.practice) {
+          return reply.status(400).send({
+            success: false,
+            error: 'بیعانه انتخاب‌شده متعلق به این بیمار و مطب نیست.'
+          });
+        }
+        if (matchedDeposit.remainingAmount <= 0 || matchedDeposit.status === 'applied' || matchedDeposit.status === 'refunded') {
+          return reply.status(400).send({
+            success: false,
+            error: 'این بیعانه مانده قابل تخصیص ندارد.'
+          });
+        }
+        const maxApplicable = Math.min(matchedDeposit.remainingAmount, totalCost);
+        appliedDepositAmount = data.depositDeduction !== undefined ? Math.min(data.depositDeduction, maxApplicable) : maxApplicable;
+      }
+
+      // Resolve initial payment amount and account
+      let initialPaid = 0;
+      let payAccountId = data.paymentAccountId || null;
+      let payPosLabel = data.posAccount || null;
+      let rawMethod = data.paymentMethod || null;
+
+      if (data.payments && data.payments.length > 0) {
+        initialPaid = data.payments.reduce((sum, p) => sum + p.amount, 0);
+        if (!payAccountId && data.payments[0]?.paymentAccountId) payAccountId = data.payments[0].paymentAccountId;
+        if (!payPosLabel && data.payments[0]?.posAccount) payPosLabel = data.payments[0].posAccount;
+        if (!rawMethod && data.payments[0]?.method) rawMethod = data.payments[0].method;
+      } else if (data.paidAmount !== undefined) {
+        initialPaid = data.paidAmount;
+      }
+
+      let payMethod = 'cash';
+      if (rawMethod === 'pos') {
+        payMethod = data.practice === 'aesthetic' ? 'pos_aesthetic' : 'pos_dental';
+      } else if (rawMethod === 'pos_aesthetic' || rawMethod === 'pos_dental' || rawMethod === 'card_transfer' || rawMethod === 'cash') {
+        payMethod = rawMethod;
+      } else if (data.practice === 'aesthetic') {
+        payMethod = 'pos_aesthetic';
+      } else {
+        payMethod = 'pos_dental';
+      }
+
+      // Initial Payment Overpayment check
+      const remainingPayable = Math.max(0, totalCost - appliedDepositAmount);
+      if (initialPaid > remainingPayable) {
+        return reply.status(400).send({
+          success: false,
+          error: `مبلغ دریافت‌شده نمی‌تواند بیشتر از باقیمانده قابل تسویه (${remainingPayable.toLocaleString('fa-IR')} تومان) باشد.`
+        });
+      }
+
+      // Validate payment account if initialPaid > 0
+      if (initialPaid > 0 && payAccountId) {
+        const acc = db.select().from(paymentAccounts).where(eq(paymentAccounts.id, payAccountId)).get();
+        if (acc && acc.practice !== data.practice) {
+          return reply.status(400).send({
+            success: false,
+            error: 'حساب انتخاب‌شده متعلق به این مطب نیست.'
+          });
+        }
+      }
+
+      const timestampStr = data.timestamp || '12:00';
+      const createdObligations: any[] = [];
+      const createdReceipts: any[] = [];
+      const baseNow = Date.now();
+
+      try {
+        sqlite.transaction(() => {
+          let depositRemainingToAllocate = appliedDepositAmount;
+          let paidRemainingToAllocate = initialPaid;
+
+          for (let i = 0; i < resolvedServices.length; i++) {
+            const srvItem = resolvedServices[i];
+            const srvCost = srvItem.cost;
+
+            // 1. Allocate deposit to this service
+            const srvDeposit = Math.min(depositRemainingToAllocate, srvCost);
+            depositRemainingToAllocate -= srvDeposit;
+
+            // 2. Payable on this service after deposit
+            const srvPayableAfterDeposit = srvCost - srvDeposit;
+
+            // 3. Allocate paidAmount to this service
+            const srvPaid = Math.min(paidRemainingToAllocate, srvPayableAfterDeposit);
+            paidRemainingToAllocate -= srvPaid;
+
+            // 4. Remaining debt on this service
+            const srvDebt = srvPayableAfterDeposit - srvPaid;
+
+            // 5. Due date for this service if debt exists
+            let srvDueDate: string | null = null;
+            if (srvDebt > 0) {
+              if (data.debtDueDate) {
+                srvDueDate = toStandardJalaliDbDate(data.debtDueDate);
+              } else if (srvItem.defaultPaymentTermDays && srvItem.defaultPaymentTermDays > 0) {
+                srvDueDate = moment(srvDate, 'YYYY-MM-DD').add(srvItem.defaultPaymentTermDays, 'days').format('YYYY-MM-DD');
+              } else {
+                srvDueDate = moment(srvDate, 'YYYY-MM-DD').add(10, 'days').format('YYYY-MM-DD');
+              }
+            }
+
+            const obId = `ob-${baseNow}-${i + 1}`;
+
+            // Insert Obligation
+            db.insert(financialObligations).values({
+              id: obId,
+              patientId: data.patientId,
+              appointmentId: data.appointmentId || null,
+              serviceId: srvItem.serviceId || null,
+              practice: data.practice,
+              serviceDate: srvDate,
+              recordDate: recDate,
+              serviceName: srvItem.serviceName,
+              totalCost: srvCost,
+              discount: 0,
+              netCost: srvCost,
+              dueDate: srvDueDate,
+              notes: data.notes || null
+            }).run();
+
+            // Insert Deposit Allocation Receipt if srvDeposit > 0
+            if (matchedDeposit && srvDeposit > 0) {
+              const allocReceiptId = `alloc-${matchedDeposit.id}-${baseNow}-${i + 1}`;
+              const allocReceipt = {
+                id: allocReceiptId,
+                obligationId: obId,
+                patientId: data.patientId,
+                appointmentId: data.appointmentId || matchedDeposit.appointmentId || null,
+                practice: data.practice,
+                recordDate: recDate,
+                serviceDate: srvDate,
+                paidAmount: srvDeposit,
+                amount: srvDeposit,
+                paymentMethod: matchedDeposit.paymentMethod,
+                paymentAccountId: matchedDeposit.paymentAccountId || null,
+                posAccount: `تخصیص بیعانه (${matchedDeposit.posAccount || 'صندوق'})`,
+                timestamp: timestampStr,
+                notes: `اعمال مبلغ ${srvDeposit.toLocaleString('fa-IR')} تومان بیعانه روی خدمت ${srvItem.serviceName}`,
+                depositId: matchedDeposit.id,
+                receiptType: 'deposit_allocation'
+              };
+              db.insert(paymentReceipts).values(allocReceipt).run();
+              createdReceipts.push(allocReceipt);
+            }
+
+            // Insert Initial Payment Receipt if srvPaid > 0
+            if (srvPaid > 0) {
+              const receiptId = `pay-${obId}-${baseNow}`;
+              const payReceipt = {
+                id: receiptId,
+                obligationId: obId,
+                patientId: data.patientId,
+                appointmentId: data.appointmentId || null,
+                practice: data.practice,
+                recordDate: recDate,
+                serviceDate: srvDate,
+                paidAmount: srvPaid,
+                amount: srvPaid,
+                paymentMethod: payMethod,
+                paymentAccountId: payAccountId || null,
+                posAccount: payPosLabel || (payMethod === 'cash' ? 'نقد' : 'کارتخوان'),
+                timestamp: timestampStr,
+                debtDueDate: srvDebt > 0 ? srvDueDate : null,
+                notes: data.notes || `پرداخت اولیه تسویه خدمت ${srvItem.serviceName}`,
+                receiptType: 'normal'
+              };
+              db.insert(paymentReceipts).values(payReceipt).run();
+              createdReceipts.push(payReceipt);
+            }
+
+            createdObligations.push({
+              id: obId,
+              serviceId: srvItem.serviceId,
+              serviceName: srvItem.serviceName,
+              amount: srvCost,
+              totalCost: srvCost,
+              netCost: srvCost,
+              paidAmount: srvPaid + srvDeposit,
+              remainingDebt: srvDebt,
+              dueDate: srvDueDate
+            });
+          }
+
+          // Update Deposit Record if applied
+          if (matchedDeposit && appliedDepositAmount > 0) {
+            const initReceipt = db.select().from(paymentReceipts).where(eq(paymentReceipts.id, matchedDeposit.paymentReceiptId || '')).get();
+            if (initReceipt && !initReceipt.obligationId) {
+              db.update(paymentReceipts).set({
+                paidAmount: Math.max(0, initReceipt.paidAmount - appliedDepositAmount)
+              }).where(eq(paymentReceipts.id, initReceipt.id)).run();
+            }
+
+            const newRemaining = matchedDeposit.remainingAmount - appliedDepositAmount;
+            const newStatus = newRemaining === 0 ? 'applied' : 'partially_applied';
+
+            let depHistory: any[] = [];
+            try { depHistory = JSON.parse(matchedDeposit.history || '[]'); } catch { depHistory = []; }
+
+            depHistory.push({
+              action: 'applied_at_checkout',
+              timestamp: timestampStr,
+              date: recDate,
+              amount: appliedDepositAmount,
+              details: `اعمال مبلغ ${appliedDepositAmount.toLocaleString('fa-IR')} تومان بیعانه در زمان ثبت تسویه چند خدمت (${resolvedServices.map(s => s.serviceName).join('، ')})`
+            });
+
+            db.update(deposits).set({
+              remainingAmount: newRemaining,
+              status: newStatus,
+              serviceObligationId: createdObligations[0]?.id || null,
+              history: JSON.stringify(depHistory)
+            }).where(eq(deposits.id, matchedDeposit.id)).run();
+          }
+
+          // If linked to an appointment, mark it completed and presence as present
+          if (data.appointmentId) {
+            db.update(appointments).set({
+              status: 'completed',
+              presenceStatus: 'present'
+            }).where(eq(appointments.id, data.appointmentId)).run();
+          }
+        })();
+      } catch (txnErr: any) {
+        throw txnErr;
+      }
+
+      const updatedApt = data.appointmentId
+        ? db.select().from(appointments).where(eq(appointments.id, data.appointmentId)).get()
+        : null;
+
+      return reply.status(201).send({
+        success: true,
+        data: {
+          obligations: createdObligations,
+          receipts: createdReceipts,
+          appointment: updatedApt,
+          totalCost,
+          appliedDepositAmount,
+          paidAmount: initialPaid,
+          remainingDebt: Math.max(0, totalCost - appliedDepositAmount - initialPaid)
+        }
+      });
+    } catch (err: any) {
+      fastify.log.error(err);
+      return reply.status(500).send({
+        success: false,
+        error: 'خطا در ثبت تسویه خدمات'
       });
     }
   });

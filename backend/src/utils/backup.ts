@@ -3,8 +3,7 @@ import path from 'path';
 import { sqlite } from '../config/database';
 
 export function performBackup(): string {
-  const dbPath = process.env.DATABASE_PATH || 'data/clinic.db';
-  const fullDbPath = path.isAbsolute(dbPath) ? dbPath : path.join(process.cwd(), dbPath);
+  const fullDbPath = sqlite.name;
 
   if (!fs.existsSync(fullDbPath)) {
     throw new Error(`Database file does not exist at ${fullDbPath}`);

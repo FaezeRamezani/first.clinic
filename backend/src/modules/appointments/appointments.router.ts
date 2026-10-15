@@ -237,18 +237,19 @@ export async function appointmentsRouter(fastify: FastifyInstance) {
 
       try {
         sqlite.transaction(() => {
-          // Conflict Check: Active appointments for same doctor, date, and timeSlot
+          // Capacity Check: Maximum 3 active appointments for (practice + date + timeSlot)
           const existing = db.select().from(appointments).all();
-          const hasConflict = existing.some(a => {
+          const activeInSlot = existing.filter(a => {
+            if (data.previousAppointmentId && a.id === data.previousAppointmentId) return false;
             if (a.status === 'canceled' || a.status === 'rescheduled') return false;
-            if (a.doctorId !== data.doctorId) return false;
+            if (a.practice !== data.practice) return false;
             const aDate = toStandardJalaliDbDate(a.date);
             const aSlot = toEnglishDigits(a.timeSlot).trim();
             return aDate === stdDate && aSlot === stdTimeSlot;
           });
 
-          if (hasConflict) {
-            throw new Error('CONFLICT:این زمان برای پزشک انتخاب‌شده قبلاً رزرو شده است.');
+          if (activeInSlot.length >= 3) {
+            throw new Error('CONFLICT:ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
           }
 
           // Ensure practice membership exists
@@ -373,23 +374,27 @@ export async function appointmentsRouter(fastify: FastifyInstance) {
       const newDate = data.date ? toStandardJalaliDbDate(data.date) : targetApt.date;
       const newTimeSlot = data.timeSlot ? toEnglishDigits(data.timeSlot).trim() : targetApt.timeSlot;
 
-      // Check conflict if doctor, date, or timeSlot changed
-      const isScheduleChanged = data.doctorId || data.date || data.timeSlot;
-      if (isScheduleChanged) {
+      // Check slot capacity if practice, doctor, date, timeSlot, or status changed
+      const newPractice = data.practice || targetApt.practice;
+      const newStatus = data.status || targetApt.status;
+      const isTargetActive = newStatus !== 'canceled' && newStatus !== 'rescheduled';
+      const isScheduleOrStatusChanged = data.practice || data.doctorId || data.date || data.timeSlot || data.status;
+
+      if (isTargetActive && isScheduleOrStatusChanged) {
         const existing = db.select().from(appointments).all();
-        const hasConflict = existing.some(a => {
+        const activeInSlot = existing.filter(a => {
           if (a.id === id) return false;
           if (a.status === 'canceled' || a.status === 'rescheduled') return false;
-          if (a.doctorId !== newDocId) return false;
+          if (a.practice !== newPractice) return false;
           const aDate = toStandardJalaliDbDate(a.date);
           const aSlot = toEnglishDigits(a.timeSlot).trim();
           return aDate === newDate && aSlot === newTimeSlot;
         });
 
-        if (hasConflict) {
+        if (activeInSlot.length >= 3) {
           return reply.status(409).send({
             success: false,
-            error: 'این زمان برای پزشک انتخاب‌شده قبلاً رزرو شده است.'
+            error: 'ظرفیت این بازه زمانی در این مطب تکمیل شده است.'
           });
         }
       }

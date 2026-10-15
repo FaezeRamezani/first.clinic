@@ -76,6 +76,33 @@ export const financeApi = {
     });
   },
 
+  checkout: async (data: {
+    patientId: string;
+    appointmentId?: string;
+    practice: 'aesthetic' | 'dental';
+    services: Array<{
+      serviceId?: string;
+      serviceName: string;
+      cost: number;
+      defaultPaymentTermDays?: number;
+    }>;
+    paidAmount?: number;
+    paymentMethod?: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer';
+    paymentAccountId?: string;
+    posAccount?: string;
+    debtDueDate?: string;
+    notes?: string;
+    depositId?: string;
+    timestamp?: string;
+    serviceDate?: string;
+    recordDate?: string;
+  }): Promise<any> => {
+    return request<any>('/api/finance/checkout', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
   recordPayment: async (data: {
     obligationId?: string;
     patientId: string;

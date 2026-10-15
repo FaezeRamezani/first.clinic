@@ -51,7 +51,7 @@ export interface ServiceItem {
   name: string;
   code: string;
   practice: 'aesthetic' | 'dental';
-  price: number; // In Tomans
+  price?: number; // In Tomans (optional, fixed tariff removed)
   duration: number; // minutes
   description?: string;
   defaultPaymentTermDays?: number;
@@ -151,8 +151,8 @@ export interface FinancialTransaction {
   timestamp?: string; // Time e.g. ۱۴:۳۰
   serviceName: string;
   totalCost: number; // Tomans
-  discount: number; // Tomans
-  netCost: number; // totalCost - discount
+  discount?: number; // Tomans (historical only)
+  netCost: number; // totalCost - (discount || 0)
   paidAmount: number;
   remainingDebt: number;
   paymentMethod: 'cash' | 'pos_aesthetic' | 'pos_dental' | 'card_transfer';

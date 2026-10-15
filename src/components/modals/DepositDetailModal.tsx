@@ -192,7 +192,7 @@ export const DepositDetailModal: React.FC = () => {
     if (!clinicDoctor) return;
     const conflict = checkAppointmentConflict(d, s, clinicDoctor.id, dep.appointmentId);
     if (conflict) {
-      setApptConflictError(`این زمان (${s}) در تاریخ ${d} برای پزشک رزرو است.`);
+      setApptConflictError('ظرفیت این بازه زمانی در این مطب تکمیل شده است.');
     } else {
       setApptConflictError('');
     }
@@ -426,12 +426,7 @@ export const DepositDetailModal: React.FC = () => {
                 {dep.serviceName ? dep.serviceName : 'تعیین نشده (بیعانه عمومی مراجعه)'}
               </span>
             </div>
-            {dep.servicePrice && (
-              <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-semibold text-[11px]">تعرفه خدمت:</span>
-                <span className="font-bold text-indigo-600">{formatCurrency(dep.servicePrice)}</span>
-              </div>
-            )}
+
             {dep.notes && (
               <div className="pt-2 border-t border-slate-100">
                 <span className="text-slate-500 font-semibold text-[11px] block mb-0.5">توضیحات:</span>

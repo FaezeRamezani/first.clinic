@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { ServiceItem } from '../../types';
-import { formatCurrency, toEnglishDigits } from '../../utils/persianUtils';
+import { toEnglishDigits } from '../../utils/persianUtils';
 import { Search, ChevronDown, X, Check } from 'lucide-react';
 
 interface SearchableServiceSelectProps {
@@ -75,7 +75,7 @@ export const SearchableServiceSelect: React.FC<SearchableServiceSelectProps> = (
         {selectedService ? (
           <div className="flex items-center justify-between w-full min-w-0">
             <span className="text-slate-900 font-bold text-xs truncate">
-              {selectedService.name} ({formatCurrency(selectedService.price)})
+              {selectedService.name}
             </span>
             <div className="flex items-center gap-1.5 shrink-0 mr-2">
               <span
@@ -163,12 +163,11 @@ export const SearchableServiceSelect: React.FC<SearchableServiceSelectProps> = (
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 mr-2">
-                      <span className="text-xs font-black text-indigo-700 dir-ltr">
-                        {formatCurrency(srv.price)}
-                      </span>
-                      {isSelected && <Check className="w-4 h-4 text-indigo-600" />}
-                    </div>
+                    {isSelected && (
+                      <div className="shrink-0 mr-2">
+                        <Check className="w-4 h-4 text-indigo-600" />
+                      </div>
+                    )}
                   </div>
                 );
               })
